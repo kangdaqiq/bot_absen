@@ -1,0 +1,23 @@
+{
+  "name": "whatsapp-bot-absensi",
+  "version": "1.0.0",
+  "description": "WhatsApp Bot untuk cek absensi siswa",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "keywords": ["whatsapp", "bot", "attendance", "absensi"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mysql2": "^3.6.5",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "moment-timezone": "^0.5.43"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
