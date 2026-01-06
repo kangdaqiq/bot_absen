@@ -652,6 +652,85 @@ function generateRegistrationError(reason) {
     return message;
 }
 
+/**
+ * Generate student notification for manual attendance
+ */
+function generateStudentAttendanceNotification(studentName, status, keterangan, teacherName) {
+    const statusEmoji = {
+        'H': '✅',
+        'I': '📝',
+        'S': '🤒',
+        'A': '❌'
+    };
+
+    const statusText = {
+        'H': 'Hadir',
+        'I': 'Izin',
+        'S': 'Sakit',
+        'A': 'Alpha'
+    };
+
+    const today = moment().format('dddd, DD MMMM YYYY');
+    const now = moment().format('HH:mm');
+
+    return `${statusEmoji[status]} *Notifikasi Absensi*
+
+👋 Halo, *${studentName}*!
+
+Guru telah mencatat absensi Anda:
+
+📅 Tanggal: ${today}
+⏰ Jam: ${now}
+📊 Status: *${statusText[status]}*
+📝 Keterangan: ${keterangan}
+👨‍🏫 Dicatat oleh: ${teacherName}
+
+_Pastikan data absensi Anda sudah benar._`;
+}
+
+/**
+ * Generate student notification for check-in
+ */
+function generateStudentCheckinNotification(studentName, teacherName) {
+    const today = moment().format('dddd, DD MMMM YYYY');
+    const now = moment().format('HH:mm');
+
+    return `✅ *Notifikasi Absen Masuk*
+
+👋 Halo, *${studentName}*!
+
+Guru telah mencatat absen masuk Anda:
+
+📅 Tanggal: ${today}
+⏰ Jam Masuk: ${now}
+📊 Status: *Hadir*
+👨‍🏫 Dicatat oleh: ${teacherName}
+
+_Jangan lupa absen pulang ya!_ 🏠`;
+}
+
+/**
+ * Generate student notification for check-out
+ */
+function generateStudentCheckoutNotification(studentName, jamMasuk, teacherName) {
+    const today = moment().format('dddd, DD MMMM YYYY');
+    const now = moment().format('HH:mm');
+    const jamMasukFormatted = jamMasuk ? moment(jamMasuk, 'HH:mm:ss').format('HH:mm') : '-';
+
+    return `🏠 *Notifikasi Absen Pulang*
+
+👋 Halo, *${studentName}*!
+
+Guru telah mencatat absen pulang Anda:
+
+📅 Tanggal: ${today}
+⏰ Jam Masuk: ${jamMasukFormatted}
+🏠 Jam Pulang: ${now}
+👨‍🏫 Dicatat oleh: ${teacherName}
+
+_Hati-hati di jalan, sampai jumpa besok!_ 👋`;
+}
+
 module.exports = {
     parseCommand,
     parseTeacherCommand,
@@ -680,5 +759,9 @@ module.exports = {
     generateRegistrationSuccessMessage,
     generateRegistrationAskNIS,
     generateRegistrationAskTglLahir,
-    generateRegistrationError
+    generateRegistrationError,
+    // Student notifications
+    generateStudentAttendanceNotification,
+    generateStudentCheckinNotification,
+    generateStudentCheckoutNotification
 };

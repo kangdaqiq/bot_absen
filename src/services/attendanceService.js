@@ -1,5 +1,7 @@
 const db = require('../config/database');
 const moment = require('moment-timezone');
+const whatsapp = require('../config/whatsapp');
+const messageService = require('./messageService');
 
 moment.tz.setDefault('Asia/Jakarta');
 
@@ -247,6 +249,36 @@ async function createManualAttendance(studentId, status, teacherId, teacherName,
             }
         }
 
+        // Send notification to student
+        try {
+            // Get student data with phone number
+            const [studentData] = await db.query(
+                `SELECT s.*, k.nama_kelas 
+                 FROM siswa s 
+                 LEFT JOIN kelas k ON s.kelas_id = k.id 
+                 WHERE s.id = ?`,
+                [studentId]
+            );
+
+            if (studentData.length > 0 && studentData[0].no_wa) {
+                const student = studentData[0];
+                const notificationMessage = messageService.generateStudentAttendanceNotification(
+                    student.nama,
+                    status,
+                    finalKeterangan,
+                    teacherName
+                );
+
+                await whatsapp.sendMessage(student.no_wa, notificationMessage);
+                console.log(`✅ Notification sent to student ${student.nama} (${student.no_wa})`);
+            } else {
+                console.log(`⚠️ Student has no WhatsApp number registered, skipping notification`);
+            }
+        } catch (notifError) {
+            // Log error but don't throw - attendance should still be saved
+            console.error('⚠️ Failed to send notification to student:', notifError.message);
+        }
+
         return true;
     } catch (error) {
         console.error('Error creating manual attendance:', error);
@@ -401,6 +433,34 @@ async function quickCheckin(studentId, teacherName) {
             );
         }
 
+        // Send notification to student
+        try {
+            // Get student data with phone number
+            const [studentData] = await db.query(
+                `SELECT s.*, k.nama_kelas 
+                 FROM siswa s 
+                 LEFT JOIN kelas k ON s.kelas_id = k.id 
+                 WHERE s.id = ?`,
+                [studentId]
+            );
+
+            if (studentData.length > 0 && studentData[0].no_wa) {
+                const student = studentData[0];
+                const notificationMessage = messageService.generateStudentCheckinNotification(
+                    student.nama,
+                    teacherName
+                );
+
+                await whatsapp.sendMessage(student.no_wa, notificationMessage);
+                console.log(`✅ Check-in notification sent to student ${student.nama} (${student.no_wa})`);
+            } else {
+                console.log(`⚠️ Student has no WhatsApp number registered, skipping notification`);
+            }
+        } catch (notifError) {
+            // Log error but don't throw - attendance should still be saved
+            console.error('⚠️ Failed to send check-in notification to student:', notifError.message);
+        }
+
         return true;
     } catch (error) {
         console.error('Error quick check-in:', error);
@@ -435,6 +495,35 @@ async function quickCheckout(studentId, teacherName) {
              WHERE student_id = ? AND tanggal = ?`,
             [now, studentId, today]
         );
+
+        // Send notification to student
+        try {
+            // Get student data with phone number
+            const [studentData] = await db.query(
+                `SELECT s.*, k.nama_kelas 
+                 FROM siswa s 
+                 LEFT JOIN kelas k ON s.kelas_id = k.id 
+                 WHERE s.id = ?`,
+                [studentId]
+            );
+
+            if (studentData.length > 0 && studentData[0].no_wa) {
+                const student = studentData[0];
+                const notificationMessage = messageService.generateStudentCheckoutNotification(
+                    student.nama,
+                    existing[0].jam_masuk,
+                    teacherName
+                );
+
+                await whatsapp.sendMessage(student.no_wa, notificationMessage);
+                console.log(`✅ Check-out notification sent to student ${student.nama} (${student.no_wa})`);
+            } else {
+                console.log(`⚠️ Student has no WhatsApp number registered, skipping notification`);
+            }
+        } catch (notifError) {
+            // Log error but don't throw - attendance should still be saved
+            console.error('⚠️ Failed to send check-out notification to student:', notifError.message);
+        }
 
         return { success: true, jamMasuk: existing[0].jam_masuk };
     } catch (error) {
