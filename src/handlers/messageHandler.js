@@ -146,6 +146,8 @@ async function handleMessage(req, res) {
 
     } catch (error) {
         console.error('❌ Error handling message:', error);
+        console.error('📋 Error Stack:', error.stack);
+        console.error('📦 Request Body:', JSON.stringify(req.body, null, 2));
 
         // Try to send error message to user
         try {
@@ -162,12 +164,14 @@ async function handleMessage(req, res) {
                 await whatsapp.sendMessage(phoneNumber, errorMessage);
             }
         } catch (sendError) {
-            console.error('Failed to send error message:', sendError);
+            console.error('❌ Failed to send error message:', sendError);
+            console.error('📋 Send Error Stack:', sendError.stack);
         }
 
         return res.status(500).json({
             success: false,
-            error: error.message
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
 }

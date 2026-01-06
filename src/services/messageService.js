@@ -1,7 +1,36 @@
 const moment = require('moment-timezone');
-const { formatStatus, formatDuration } = require('./attendanceService');
 
 moment.tz.setDefault('Asia/Jakarta');
+
+/**
+ * Format attendance status
+ */
+function formatStatus(status) {
+    const statusMap = {
+        'H': '✅ Hadir',
+        'I': '📝 Izin',
+        'S': '🤒 Sakit',
+        'A': '❌ Alpha',
+        'B': '🚫 Bolos',
+        'P': '🏠 Pulang'
+    };
+    return statusMap[status] || status;
+}
+
+/**
+ * Format time duration
+ */
+function formatDuration(seconds) {
+    if (!seconds || seconds <= 0) return '-';
+
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (hours > 0) {
+        return `${hours} jam ${minutes} menit`;
+    }
+    return `${minutes} menit`;
+}
 
 /**
  * Parse command from message
