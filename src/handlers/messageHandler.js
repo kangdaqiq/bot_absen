@@ -346,13 +346,27 @@ async function handleTeacherMessage(phoneNumber, body, teacher) {
                 const selectedStudent = session.searchResults[selectedIndex];
 
                 if (session.action === 'create') {
-                    // CREATE: Show status selection
-                    responseMessage = messageService.generateStatusSelectionMessage(selectedStudent.nama);
-                    sessionManager.setSession(phoneNumber, {
-                        ...session,
-                        step: 'select_status',
-                        selectedStudent: selectedStudent
-                    });
+                    // CREATE: Check if attendance already exists for today
+                    const existingAttendance = await attendanceService.getTodayAttendance(selectedStudent.id);
+
+                    if (existingAttendance) {
+                        // Show confirmation message
+                        responseMessage = messageService.generateAttendanceExistsConfirmation(selectedStudent, existingAttendance);
+                        sessionManager.setSession(phoneNumber, {
+                            ...session,
+                            step: 'confirm_replace_create',
+                            selectedStudent: selectedStudent,
+                            existingAttendance: existingAttendance
+                        });
+                    } else {
+                        // No existing record, proceed to status selection
+                        responseMessage = messageService.generateStatusSelectionMessage(selectedStudent.nama);
+                        sessionManager.setSession(phoneNumber, {
+                            ...session,
+                            step: 'select_status',
+                            selectedStudent: selectedStudent
+                        });
+                    }
                 } else if (session.action === 'edit') {
                     // EDIT: Show edit options
                     responseMessage = messageService.generateEditOptionsMessage(selectedStudent.nama);
@@ -371,28 +385,60 @@ async function handleTeacherMessage(phoneNumber, body, teacher) {
                         selectedStudent: selectedStudent
                     });
                 } else if (session.action === 'quick_checkin') {
-                    // QUICK CHECK-IN: Execute immediately
-                    await attendanceService.quickCheckin(selectedStudent.id, session.teacherName);
-                    responseMessage = messageService.generateQuickCheckinSuccess(
-                        selectedStudent.nama,
-                        selectedStudent.nama_kelas
-                    );
-                    sessionManager.clearSession(phoneNumber);
-                } else if (session.action === 'quick_checkout') {
-                    // QUICK CHECK-OUT: Execute immediately
-                    const result = await attendanceService.quickCheckout(selectedStudent.id, session.teacherName);
+                    // QUICK CHECK-IN: Check if attendance already exists
+                    const existingAttendance = await attendanceService.getTodayAttendance(selectedStudent.id);
 
-                    if (result.success) {
-                        const jamMasuk = result.jamMasuk ? moment(result.jamMasuk, 'HH:mm:ss').format('HH:mm') : '-';
-                        responseMessage = messageService.generateQuickCheckoutSuccess(
-                            selectedStudent.nama,
-                            selectedStudent.nama_kelas,
-                            jamMasuk
-                        );
+                    if (existingAttendance) {
+                        // Show confirmation message
+                        responseMessage = messageService.generateCheckinExistsConfirmation(selectedStudent, existingAttendance);
+                        sessionManager.setSession(phoneNumber, {
+                            ...session,
+                            step: 'confirm_replace_checkin',
+                            selectedStudent: selectedStudent,
+                            existingAttendance: existingAttendance
+                        });
                     } else {
-                        responseMessage = messageService.generateNoAttendanceForCheckout(selectedStudent.nama);
+                        // No existing record, execute check-in immediately
+                        await attendanceService.quickCheckin(selectedStudent.id, session.teacherName);
+                        responseMessage = messageService.generateQuickCheckinSuccess(
+                            selectedStudent.nama,
+                            selectedStudent.nama_kelas
+                        );
+                        sessionManager.clearSession(phoneNumber);
                     }
-                    sessionManager.clearSession(phoneNumber);
+                } else if (session.action === 'quick_checkout') {
+                    // QUICK CHECK-OUT: Check if attendance exists and if jam_pulang already set
+                    const existingAttendance = await attendanceService.getTodayAttendance(selectedStudent.id);
+
+                    if (!existingAttendance) {
+                        // No attendance record found
+                        responseMessage = messageService.generateNoAttendanceForCheckout(selectedStudent.nama);
+                        sessionManager.clearSession(phoneNumber);
+                    } else if (existingAttendance.jam_pulang) {
+                        // Already has jam_pulang, show confirmation
+                        responseMessage = messageService.generateCheckoutExistsConfirmation(selectedStudent, existingAttendance);
+                        sessionManager.setSession(phoneNumber, {
+                            ...session,
+                            step: 'confirm_replace_checkout',
+                            selectedStudent: selectedStudent,
+                            existingAttendance: existingAttendance
+                        });
+                    } else {
+                        // Has attendance but no jam_pulang yet, execute checkout immediately
+                        const result = await attendanceService.quickCheckout(selectedStudent.id, session.teacherName);
+
+                        if (result.success) {
+                            const jamMasuk = result.jamMasuk ? moment(result.jamMasuk, 'HH:mm:ss').format('HH:mm') : '-';
+                            responseMessage = messageService.generateQuickCheckoutSuccess(
+                                selectedStudent.nama,
+                                selectedStudent.nama_kelas,
+                                jamMasuk
+                            );
+                        } else {
+                            responseMessage = messageService.generateNoAttendanceForCheckout(selectedStudent.nama);
+                        }
+                        sessionManager.clearSession(phoneNumber);
+                    }
                 }
             } else {
                 responseMessage = messageService.generateInvalidSelectionMessage(session.searchResults.length);
@@ -502,6 +548,58 @@ async function handleTeacherMessage(phoneNumber, body, teacher) {
     else if (command === 'confirm_no' && session && session.step === 'confirm_delete') {
         // DELETE: Cancelled
         responseMessage = `❌ *Penghapusan Dibatalkan*\n\nAbsensi tidak jadi dihapus.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
+        sessionManager.clearSession(phoneNumber);
+    }
+    // HANDLE CONFIRMATION FOR REPLACE CREATE
+    else if (command === 'confirm_yes' && session && session.step === 'confirm_replace_create') {
+        // CREATE: User confirmed to replace existing attendance
+        // Proceed to status selection
+        responseMessage = messageService.generateStatusSelectionMessage(session.selectedStudent.nama);
+        sessionManager.setSession(phoneNumber, {
+            ...session,
+            step: 'select_status'
+        });
+    }
+    else if (command === 'confirm_no' && session && session.step === 'confirm_replace_create') {
+        // CREATE: User cancelled replacement
+        responseMessage = `❌ *Perubahan Dibatalkan*\n\nAbsensi tidak jadi diubah.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
+        sessionManager.clearSession(phoneNumber);
+    }
+    // HANDLE CONFIRMATION FOR REPLACE CHECKIN
+    else if (command === 'confirm_yes' && session && session.step === 'confirm_replace_checkin') {
+        // CHECKIN: User confirmed to replace existing check-in
+        await attendanceService.quickCheckin(session.selectedStudent.id, session.teacherName);
+        responseMessage = messageService.generateQuickCheckinSuccess(
+            session.selectedStudent.nama,
+            session.selectedStudent.nama_kelas
+        );
+        sessionManager.clearSession(phoneNumber);
+    }
+    else if (command === 'confirm_no' && session && session.step === 'confirm_replace_checkin') {
+        // CHECKIN: User cancelled replacement
+        responseMessage = `❌ *Perubahan Dibatalkan*\n\nJam masuk tidak jadi diubah.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
+        sessionManager.clearSession(phoneNumber);
+    }
+    // HANDLE CONFIRMATION FOR REPLACE CHECKOUT
+    else if (command === 'confirm_yes' && session && session.step === 'confirm_replace_checkout') {
+        // CHECKOUT: User confirmed to replace existing check-out
+        const result = await attendanceService.quickCheckout(session.selectedStudent.id, session.teacherName);
+
+        if (result.success) {
+            const jamMasuk = result.jamMasuk ? moment(result.jamMasuk, 'HH:mm:ss').format('HH:mm') : '-';
+            responseMessage = messageService.generateQuickCheckoutSuccess(
+                session.selectedStudent.nama,
+                session.selectedStudent.nama_kelas,
+                jamMasuk
+            );
+        } else {
+            responseMessage = messageService.generateNoAttendanceForCheckout(session.selectedStudent.nama);
+        }
+        sessionManager.clearSession(phoneNumber);
+    }
+    else if (command === 'confirm_no' && session && session.step === 'confirm_replace_checkout') {
+        // CHECKOUT: User cancelled replacement
+        responseMessage = `❌ *Perubahan Dibatalkan*\n\nJam pulang tidak jadi diubah.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
         sessionManager.clearSession(phoneNumber);
     }
     // HANDLE TEXT INPUT (KETERANGAN)

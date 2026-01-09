@@ -760,6 +760,92 @@ Guru telah mencatat absen pulang Anda:
 _Hati-hati di jalan, sampai jumpa besok!_ 👋`;
 }
 
+/**
+ * Generate confirmation message when attendance record already exists (for manual attendance)
+ */
+function generateAttendanceExistsConfirmation(student, attendance) {
+    const statusText = {
+        'H': 'Hadir',
+        'I': 'Izin',
+        'S': 'Sakit',
+        'A': 'Alpha'
+    };
+
+    const jamMasuk = attendance.jam_masuk ? moment(attendance.jam_masuk, 'HH:mm:ss').format('HH:mm') : '-';
+    const today = moment().format('dddd, DD MMMM YYYY');
+
+    return `⚠️ *Absensi Sudah Ada*
+
+👤 Nama: *${student.nama}*
+📚 Kelas: ${student.nama_kelas || '-'}
+📅 Tanggal: ${today}
+
+📋 *Data Absensi Saat Ini:*
+⏰ Jam Masuk: ${jamMasuk}
+📊 Status: *${statusText[attendance.status]}*
+📝 Keterangan: ${attendance.keterangan || '-'}
+
+━━━━━━━━━━━━━━━━━━━━
+Apakah Anda ingin *mengganti* data absensi ini?
+
+💡 _Ketik "ya" untuk mengganti atau "tidak" untuk batal_`;
+}
+
+/**
+ * Generate confirmation message when check-in record already exists
+ */
+function generateCheckinExistsConfirmation(student, attendance) {
+    const statusText = {
+        'H': 'Hadir',
+        'I': 'Izin',
+        'S': 'Sakit',
+        'A': 'Alpha'
+    };
+
+    const jamMasuk = attendance.jam_masuk ? moment(attendance.jam_masuk, 'HH:mm:ss').format('HH:mm') : '-';
+    const today = moment().format('dddd, DD MMMM YYYY');
+
+    return `⚠️ *Siswa Sudah Absen Masuk*
+
+👤 Nama: *${student.nama}*
+📚 Kelas: ${student.nama_kelas || '-'}
+📅 Tanggal: ${today}
+
+📋 *Data Absensi Saat Ini:*
+⏰ Jam Masuk: ${jamMasuk}
+📊 Status: *${statusText[attendance.status]}*
+📝 Keterangan: ${attendance.keterangan || '-'}
+
+━━━━━━━━━━━━━━━━━━━━
+Apakah Anda ingin *mengganti* jam masuk?
+
+💡 _Ketik "ya" untuk mengganti atau "tidak" untuk batal_`;
+}
+
+/**
+ * Generate confirmation message when check-out record already exists
+ */
+function generateCheckoutExistsConfirmation(student, attendance) {
+    const jamMasuk = attendance.jam_masuk ? moment(attendance.jam_masuk, 'HH:mm:ss').format('HH:mm') : '-';
+    const jamPulang = attendance.jam_pulang ? moment(attendance.jam_pulang, 'HH:mm:ss').format('HH:mm') : '-';
+    const today = moment().format('dddd, DD MMMM YYYY');
+
+    return `⚠️ *Siswa Sudah Absen Pulang*
+
+👤 Nama: *${student.nama}*
+📚 Kelas: ${student.nama_kelas || '-'}
+📅 Tanggal: ${today}
+
+📋 *Data Absensi Saat Ini:*
+⏰ Jam Masuk: ${jamMasuk}
+🏠 Jam Pulang: ${jamPulang}
+
+━━━━━━━━━━━━━━━━━━━━
+Apakah Anda ingin *mengganti* jam pulang?
+
+💡 _Ketik "ya" untuk mengganti atau "tidak" untuk batal_`;
+}
+
 module.exports = {
     parseCommand,
     parseTeacherCommand,
@@ -792,5 +878,9 @@ module.exports = {
     // Student notifications
     generateStudentAttendanceNotification,
     generateStudentCheckinNotification,
-    generateStudentCheckoutNotification
+    generateStudentCheckoutNotification,
+    // Confirmation messages
+    generateAttendanceExistsConfirmation,
+    generateCheckinExistsConfirmation,
+    generateCheckoutExistsConfirmation
 };
