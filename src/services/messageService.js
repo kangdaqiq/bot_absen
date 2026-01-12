@@ -99,6 +99,12 @@ function parseTeacherCommand(message) {
         return { command: 'delete_attendance', searchTerm: deleteMatch[2] };
     }
 
+    // Check for contact search: "cari [nama]" or "kontak [nama]" or "info [nama]"
+    const infoMatch = text.match(/^(cari|kontak|info)\s+(.+)$/);
+    if (infoMatch) {
+        return { command: 'search_contact', searchTerm: infoMatch[2] };
+    }
+
     // Check for manual attendance: "absen [nama]"
     const absenMatch = text.match(/^absen\s+(.+)$/);
     if (absenMatch) {
@@ -844,6 +850,40 @@ function generateCheckoutExistsConfirmation(student, attendance) {
 Apakah Anda ingin *mengganti* jam pulang?
 
 💡 _Ketik "ya" untuk mengganti atau "tidak" untuk batal_`;
+}
+
+/**
+ * Generate contact info message
+ */
+function generateContactInfo(results, searchTerm) {
+    if (!results || results.length === 0) {
+        return `❌ Siswa dengan nama "${searchTerm}" tidak ditemukan.`;
+    }
+
+    let message = `🔍 *HASIL PENCARIAN KONTAK*\n`;
+    message += `Kata kunci: "${searchTerm}"\n\n`;
+
+    results.forEach((siswa, index) => {
+        const noWa = siswa.no_wa ? (siswa.no_wa.startsWith('62') ? '+' + siswa.no_wa : siswa.no_wa) : '-';
+        const waOrtu = siswa.wa_ortu ? (siswa.wa_ortu.startsWith('62') ? '+' + siswa.wa_ortu : siswa.wa_ortu) : '-';
+
+        let waLink = '';
+        if (siswa.no_wa) {
+            waLink += `\n💬 Chat Siswa: https://wa.me/${siswa.no_wa}`;
+        }
+        if (siswa.wa_ortu) {
+            waLink += `\n💬 Chat Ortu: https://wa.me/${siswa.wa_ortu}`;
+        }
+
+        message += `${index + 1}. *${siswa.nama}*\n`;
+        message += `   🆔 NIS: ${siswa.nis}\n`;
+        message += `   🏫 Kelas: ${siswa.nama_kelas || '-'}\n`;
+        message += `   📱 Siswa: ${noWa}\n`;
+        message += `   👨‍👩‍👧 Ortu: ${waOrtu}`;
+        message += `${waLink}\n\n`;
+    });
+
+    return message;
 }
 
 module.exports = {

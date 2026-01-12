@@ -602,6 +602,28 @@ async function registerStudentPhone(studentId, phoneNumber) {
     }
 }
 
+/**
+ * Search student contact info
+ */
+async function searchStudentContact(searchTerm) {
+    try {
+        const [rows] = await db.query(
+            `SELECT s.id, s.nama, s.nis, s.no_wa, s.wa_ortu, k.nama_kelas 
+             FROM siswa s 
+             LEFT JOIN kelas k ON s.kelas_id = k.id 
+             WHERE s.nama LIKE ? OR s.nis LIKE ? 
+             ORDER BY s.nama 
+             LIMIT 5`,
+            [`%${searchTerm}%`, `%${searchTerm}%`]
+        );
+
+        return rows;
+    } catch (error) {
+        console.error('Error searching student contact:', error);
+        throw error;
+    }
+}
+
 module.exports = {
     getStudentByPhone,
     getTeacherByPhone,
@@ -619,6 +641,7 @@ module.exports = {
     getStudentByNIS,
     getStudentByNISAndDate,
     registerStudentPhone,
+    searchStudentContact,
     formatStatus,
     formatDuration
 };

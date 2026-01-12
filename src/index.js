@@ -1,5 +1,6 @@
 const express = require('express');
 const webhookRoutes = require('./routes/webhook');
+const cleanupJob = require('./jobs/cleanupJob');
 require('dotenv').config();
 
 const app = express();
@@ -61,6 +62,9 @@ app.listen(PORT, () => {
     console.log(`📡 Webhook URL: http://localhost:${PORT}/webhook`);
     console.log(`🌐 Health check: http://localhost:${PORT}/`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    // Start cleanup scheduler
+    cleanupJob.startCleanupScheduler();
 });
 
 // Graceful shutdown
