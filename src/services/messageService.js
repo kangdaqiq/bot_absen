@@ -318,15 +318,17 @@ Selamat datang di *Bot Absensi SMK Assuniyah* 🎓
    Ketik: \`pulang [nama siswa]\`
    Contoh: \`pulang andi\`
    
-4️⃣ *Edit Absensi*
+4️⃣ *Cari Kontak Siswa/Ortu*
+   Ketik: \`cari [nama]\` atau \`kontak [nama]\`
+   Contoh: \`cari andi\`
+
+5️⃣ *Edit Absensi*
    Ketik: \`edit absen [nama siswa]\`
-   Contoh: \`edit absen andi\`
    
-5️⃣ *Hapus Absensi*
+6️⃣ *Hapus Absensi*
    Ketik: \`hapus absen [nama siswa]\`
-   Contoh: \`hapus absen andi\`
    
-6️⃣ *Menu Bantuan*
+7️⃣ *Menu Bantuan*
    Ketik: \`help\` atau \`menu\`
 
 💡 _Cukup ketik perintah di atas untuk menggunakan bot ini._
