@@ -226,6 +226,7 @@ async function handleTeacherMessage(phoneNumber, body, teacher) {
 
     // Parse teacher command
     const { command, searchTerm, option } = messageService.parseTeacherCommand(body);
+    console.log(`⚡ Teacher command: ${command}, Search: ${searchTerm}, Option: ${option}`);
     let responseMessage = '';
 
     // Handle commands based on session state
