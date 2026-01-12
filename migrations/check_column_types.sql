@@ -1,0 +1,14 @@
+-- Check data types of both columns
+SELECT 
+    TABLE_NAME,
+    COLUMN_NAME,
+    COLUMN_TYPE,
+    IS_NULLABLE,
+    COLUMN_KEY
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE()
+AND (
+    (TABLE_NAME = 'guru' AND COLUMN_NAME = 'id')
+    OR (TABLE_NAME = 'attendance' AND COLUMN_NAME = 'checked_in_by_teacher_id')
+)
+ORDER BY TABLE_NAME, COLUMN_NAME;

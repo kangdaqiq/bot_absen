@@ -400,7 +400,7 @@ async function handleTeacherMessage(phoneNumber, body, teacher) {
                         });
                     } else {
                         // No existing record, execute check-in immediately
-                        await attendanceService.quickCheckin(selectedStudent.id, session.teacherName);
+                        await attendanceService.quickCheckin(selectedStudent.id, session.teacherId, session.teacherName);
                         responseMessage = messageService.generateQuickCheckinSuccess(
                             selectedStudent.nama,
                             selectedStudent.nama_kelas
@@ -571,7 +571,7 @@ async function handleTeacherMessage(phoneNumber, body, teacher) {
     // HANDLE CONFIRMATION FOR REPLACE CHECKIN
     else if (command === 'confirm_yes' && session && session.step === 'confirm_replace_checkin') {
         // CHECKIN: User confirmed to replace existing check-in
-        await attendanceService.quickCheckin(session.selectedStudent.id, session.teacherName);
+        await attendanceService.quickCheckin(session.selectedStudent.id, session.teacherId, session.teacherName);
         responseMessage = messageService.generateQuickCheckinSuccess(
             session.selectedStudent.nama,
             session.selectedStudent.nama_kelas

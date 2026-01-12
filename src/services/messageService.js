@@ -888,6 +888,32 @@ function generateContactInfo(results, searchTerm) {
     return message;
 }
 
+/**
+ * Generate checkout reminder message for teachers
+ */
+function generateCheckoutReminderMessage(teacherName, students) {
+    const today = moment().format('dddd, DD MMMM YYYY');
+
+    let message = `🔔 *Pengingat Absen Pulang*\n\n`;
+    message += `Assalamualaikum, ${teacherName}!\n\n`;
+    message += `Berikut siswa yang sudah Anda absen masuk tapi belum absen pulang:\n\n`;
+
+    students.forEach((student, index) => {
+        const jamMasuk = student.jamMasuk ? moment(student.jamMasuk, 'HH:mm:ss').format('HH:mm') : '-';
+        message += `${index + 1}. *${student.studentName}*\n`;
+        message += `   📚 Kelas: ${student.className || '-'}\n`;
+        message += `   ⏰ Masuk: ${jamMasuk}\n\n`;
+    });
+
+    message += `━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `💡 Silakan absen pulang dengan:\n`;
+    message += `\`pulang [nama siswa]\`\n\n`;
+    message += `Contoh: \`pulang ${students[0].studentName}\`\n\n`;
+    message += `Terima kasih! 🙏`;
+
+    return message;
+}
+
 module.exports = {
     parseCommand,
     parseTeacherCommand,
@@ -925,5 +951,7 @@ module.exports = {
     generateAttendanceExistsConfirmation,
     generateCheckinExistsConfirmation,
     generateCheckoutExistsConfirmation,
-    generateContactInfo
+    generateContactInfo,
+    // Teacher reminders
+    generateCheckoutReminderMessage
 };

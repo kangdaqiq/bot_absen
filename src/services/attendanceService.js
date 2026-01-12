@@ -401,7 +401,7 @@ async function deleteAttendanceToday(studentId, teacherName) {
 /**
  * Quick check-in (masuk) - Record jam_masuk and set status to Hadir
  */
-async function quickCheckin(studentId, teacherName) {
+async function quickCheckin(studentId, teacherId, teacherName) {
     try {
         const today = moment().format('YYYY-MM-DD');
         const now = moment().format('HH:mm:ss');
@@ -416,22 +416,23 @@ async function quickCheckin(studentId, teacherName) {
         const keterangan = `Absen masuk oleh ${teacherName}`;
 
         if (existing.length > 0) {
-            // Update existing attendance - set jam_masuk and status to Hadir
+            // Update existing attendance - set jam_masuk, status to Hadir, and track teacher
             await db.query(
                 `UPDATE attendance 
-                 SET jam_masuk = ?, status = 'H', keterangan = ?, updated_at = NOW() 
+                 SET jam_masuk = ?, status = 'H', keterangan = ?, checked_in_by_teacher_id = ?, updated_at = NOW() 
                  WHERE student_id = ? AND tanggal = ?`,
-                [now, keterangan, studentId, today]
+                [now, keterangan, teacherId, studentId, today]
             );
         } else {
-            // Create new attendance record with Hadir status
+            // Create new attendance record with Hadir status and teacher tracking
             await db.query(
                 `INSERT INTO attendance 
-                 (student_id, tanggal, jam_masuk, status, keterangan, created_at, updated_at) 
-                 VALUES (?, ?, ?, 'H', ?, NOW(), NOW())`,
-                [studentId, today, now, keterangan]
+                 (student_id, tanggal, jam_masuk, status, keterangan, checked_in_by_teacher_id, created_at, updated_at) 
+                 VALUES (?, ?, ?, 'H', ?, ?, NOW(), NOW())`,
+                [studentId, today, now, keterangan, teacherId]
             );
         }
+
 
         // Send notification to student
         try {
@@ -488,10 +489,10 @@ async function quickCheckout(studentId, teacherName) {
             return { success: false, message: 'No attendance found' };
         }
 
-        // Update jam_pulang
+        // Update jam_pulang and set status to Hadir
         await db.query(
             `UPDATE attendance 
-             SET jam_pulang = ?, updated_at = NOW() 
+             SET jam_pulang = ?, status = 'H', updated_at = NOW() 
              WHERE student_id = ? AND tanggal = ?`,
             [now, studentId, today]
         );

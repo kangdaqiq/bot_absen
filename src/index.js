@@ -1,6 +1,7 @@
 const express = require('express');
 const webhookRoutes = require('./routes/webhook');
 const cleanupJob = require('./jobs/cleanupJob');
+const reminderJob = require('./jobs/reminderJob');
 require('dotenv').config();
 
 const app = express();
@@ -65,6 +66,9 @@ app.listen(PORT, () => {
 
     // Start cleanup scheduler
     cleanupJob.startCleanupScheduler();
+
+    // Start reminder scheduler
+    reminderJob.startReminderScheduler();
 });
 
 // Graceful shutdown
