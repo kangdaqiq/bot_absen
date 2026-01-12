@@ -533,8 +533,8 @@ async function handleTeacherMessage(phoneNumber, body, teacher) {
 
     // HANDLE CONTACT SEARCH
     else if (command === 'search_contact') {
-        const results = await attendanceService.searchStudentContact(parsed.searchTerm);
-        responseMessage = messageService.generateContactInfo(results, parsed.searchTerm);
+        const results = await attendanceService.searchStudentContact(searchTerm);
+        responseMessage = messageService.generateContactInfo(results, searchTerm);
     }
     // HANDLE CONFIRMATION (YES/NO)
     else if (command === 'confirm_yes' && session && session.step === 'confirm_delete') {
