@@ -922,5 +922,6 @@ module.exports = {
     // Confirmation messages
     generateAttendanceExistsConfirmation,
     generateCheckinExistsConfirmation,
-    generateCheckoutExistsConfirmation
+    generateCheckoutExistsConfirmation,
+    generateContactInfo
 };
