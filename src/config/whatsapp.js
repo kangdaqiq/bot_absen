@@ -15,7 +15,7 @@ async function sendMessage(phoneNumber, message) {
         // Check if it's a Group ID or already formatted ID (contains @)
         let normalizedPhone = phoneNumber;
 
-        if (!phoneNumber.includes('@')) {
+        if (!phoneNumber.includes('@') && phoneNumber.length <= 15) {
             // Normalize phone number (strip non-digits)
             normalizedPhone = phoneNumber.replace(/\D/g, '');
 
