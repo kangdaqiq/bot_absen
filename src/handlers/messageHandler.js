@@ -747,7 +747,8 @@ async function handleTeacherMessage(replyTo, body, teacher) {
         const msgId = sentResponse.data.results?.message_id || sentResponse.data.id || sentResponse.data.message_id || (sentResponse.data.key && sentResponse.data.key.id);
         if (msgId) {
             console.log(`✅ DEBUG: Captured Bot Message ID: ${msgId}`);
-            sessionManager.addBotMessageId(phoneNumber, msgId);
+            // Pass replyTo as the chatId where the message was sent (Group or Private)
+            sessionManager.addBotMessageId(phoneNumber, msgId, replyTo);
         } else {
             console.log('⚠️ DEBUG: Could not find ID in response data');
         }
@@ -874,12 +875,20 @@ async function handleRegistrationTglInput(from, body, session, phoneNumber) {
 }
 
 async function cleanupBotMessages(phoneNumber) {
-    const ids = sessionManager.getBotMessageIds(phoneNumber);
-    console.log(`🧹 DEBUG: Cleanup Triggered for ${phoneNumber}. Found IDs: ${JSON.stringify(ids)}`);
-    if (ids && ids.length > 0) {
-        console.log(`🧹 Cleaning up ${ids.length} intermediate messages for ${phoneNumber}`);
-        // Delete messages in parallel
-        await Promise.all(ids.map(id => whatsapp.deleteMessage(phoneNumber, id)));
+    const messages = sessionManager.getBotMessageIds(phoneNumber);
+    console.log(`🧹 DEBUG: Cleanup Triggered for ${phoneNumber}. Found messages: ${JSON.stringify(messages)}`);
+
+    if (messages && messages.length > 0) {
+        console.log(`🧹 Cleaning up ${messages.length} intermediate messages for ${phoneNumber}`);
+
+        // Delete messages in parallel, using the correct chatId for each message
+        await Promise.all(messages.map(msg => {
+            // Handle both old format (string ID) and new format (object {id, chatId})
+            const msgId = typeof msg === 'string' ? msg : msg.id;
+            const chatId = typeof msg === 'string' ? phoneNumber : (msg.chatId || phoneNumber);
+
+            return whatsapp.deleteMessage(chatId, msgId);
+        }));
     }
 }
 

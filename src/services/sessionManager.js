@@ -78,13 +78,14 @@ setInterval(cleanupExpiredSessions, 30 * 1000);
 /**
  * Add a bot message ID to the session for later deletion
  */
-function addBotMessageId(phoneNumber, messageId) {
+function addBotMessageId(phoneNumber, messageId, chatId) {
     const session = getSession(phoneNumber);
     if (session) {
         if (!session.botMessageIds) {
             session.botMessageIds = [];
         }
-        session.botMessageIds.push(messageId);
+        // Store both ID and ChatID to ensure we delete from the correct chat (Group vs Private)
+        session.botMessageIds.push({ id: messageId, chatId: chatId });
     }
 }
 
