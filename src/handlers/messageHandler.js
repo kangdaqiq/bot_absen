@@ -58,11 +58,28 @@ async function handleMessage(req, res) {
             chat_id !== sender_id;
 
         if (isGroupMessage) {
-            console.log(`⏭️ Ignoring group message from chat: ${chat_id}, sender: ${sender_id}`);
-            return res.json({ success: true, message: 'Group messages ignored' });
+            const botNumber = whatsapp.BOT_NUMBER;
+            if (!botNumber) {
+                console.log('⚠️ BOT_NUMBER not set, ignoring group message');
+                return res.json({ success: true, message: 'Group messages ignored (Config missing)' });
+            }
+
+            // Check if bot is tagged
+            // We look for @BotNumber in the message body
+            const isTagged = body.includes(`@${botNumber}`);
+
+            if (!isTagged) {
+                console.log(`⏭️ Ignoring untagged group message from chat: ${chat_id}`);
+                return res.json({ success: true, message: 'Group messages ignored (Not tagged)' });
+            }
+
+            console.log(`✅ Bot tagged in group message from ${phoneNumber}`);
+            // Fall through to check if sender is teacher
         }
 
-        console.log(`✅ Private message detected from ${phoneNumber}`);
+        if (!isGroupMessage) {
+            console.log(`✅ Private message detected from ${phoneNumber}`);
+        }
 
         // Check if there is an active REGISTRATION session
         const session = sessionManager.getSession(phoneNumber);
@@ -82,6 +99,13 @@ async function handleMessage(req, res) {
             console.log(`👨‍🏫 Teacher found: ${teacher.nama}`);
             const result = await handleTeacherMessage(phoneNumber, body, teacher);
             return res.json(result);
+        }
+
+        // If it's a group message and NOT a teacher (since we passed the check above), ignore it
+        // User Requirement: "khusus untuk guru yang direspon, murid engga"
+        if (isGroupMessage) {
+            console.log(`⏭️ Ignoring non-teacher message in group from ${phoneNumber}`);
+            return res.json({ success: true, message: 'Group message from non-teacher ignored' });
         }
 
         // Check if sender is a student

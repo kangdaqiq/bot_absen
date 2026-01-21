@@ -82,6 +82,10 @@ async function sendMessage(phoneNumber, message) {
     }
 }
 
+
+const BOT_NUMBER = process.env.BOT_NUMBER;
+
 module.exports = {
-    sendMessage
+    sendMessage,
+    BOT_NUMBER
 };
