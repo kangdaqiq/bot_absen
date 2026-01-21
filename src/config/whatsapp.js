@@ -97,7 +97,21 @@ async function sendMessage(phoneNumber, message) {
  */
 async function deleteMessage(phoneNumber, messageId) {
     try {
+        // Ensure proper suffix for deletion
+        let formattedPhone = phoneNumber;
+        if (!formattedPhone.includes('@')) {
+            if (formattedPhone.length > 15) {
+                formattedPhone += '@g.us';
+            } else {
+                if (formattedPhone.startsWith('0')) formattedPhone = '62' + formattedPhone.substring(1);
+                else if (!formattedPhone.startsWith('62')) formattedPhone = '62' + formattedPhone;
+                formattedPhone += '@s.whatsapp.net';
+            }
+        }
+
         const endpoints = [
+            `/message/${messageId}/revoke`,
+            `/message/${messageId}/delete`,
             '/delete/message',
             '/api/delete/message',
             '/api/message/delete',
@@ -105,12 +119,12 @@ async function deleteMessage(phoneNumber, messageId) {
         ];
 
         const payload = {
-            phone: phoneNumber,
+            phone: formattedPhone,
             messageId: messageId,
             id: messageId // handle different API variations
         };
 
-        console.log(`🗑️ Deleting message ${messageId} for ${phoneNumber}`);
+        console.log(`🗑️ Deleting message ${messageId} for ${formattedPhone}`);
 
         let lastError = null;
 
