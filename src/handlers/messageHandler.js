@@ -108,7 +108,8 @@ async function handleMessage(req, res) {
 
         if (teacher) {
             console.log(`👨‍🏫 Teacher found: ${teacher.nama}`);
-            const result = await handleTeacherMessage(phoneNumber, body, teacher);
+            const replyTo = isGroupMessage ? chat_id : phoneNumber;
+            const result = await handleTeacherMessage(replyTo, body, teacher);
             return res.json(result);
         }
 
@@ -255,7 +256,11 @@ async function handleStudentMessage(phoneNumber, body, student) {
 /**
  * Handle teacher message
  */
-async function handleTeacherMessage(phoneNumber, body, teacher) {
+async function handleTeacherMessage(replyTo, body, teacher) {
+    // Get existing session using teacher's phone number as key
+    // We use the teacher's registered number from DB for the session key
+    const phoneNumber = teacher.no_wa;
+
     // Get existing session
     const session = sessionManager.getSession(phoneNumber);
 
@@ -267,7 +272,7 @@ async function handleTeacherMessage(phoneNumber, body, teacher) {
     // Handle commands based on session state
     if (command === 'teacher_help') {
         // Clear any existing session
-        sessionManager.clearSession(phoneNumber);
+        sessionManager.clearSession(senderPhone);
         responseMessage = messageService.generateTeacherHelpMessage(teacher.nama);
     }
     // CREATE ATTENDANCE FLOW
@@ -699,8 +704,8 @@ async function handleTeacherMessage(phoneNumber, body, teacher) {
     }
 
     // Send response
-    console.log(`📤 Sending response to teacher ${phoneNumber}`);
-    await whatsapp.sendMessage(phoneNumber, responseMessage);
+    console.log(`📤 Sending response to teacher at ${replyTo}`);
+    await whatsapp.sendMessage(replyTo, responseMessage);
 
     return {
         success: true,

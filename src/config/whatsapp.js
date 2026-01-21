@@ -12,16 +12,23 @@ const WA_API_PASSWORD = process.env.WA_API_PASSWORD || 'admin';
  */
 async function sendMessage(phoneNumber, message) {
     try {
-        // Normalize phone number
-        let normalizedPhone = phoneNumber.replace(/\D/g, '');
+        // Check if it's a Group ID or already formatted ID (contains @)
+        let normalizedPhone = phoneNumber;
 
-        // Add country code if not present
-        if (!normalizedPhone.startsWith('62')) {
-            if (normalizedPhone.startsWith('0')) {
-                normalizedPhone = '62' + normalizedPhone.substring(1);
-            } else {
-                normalizedPhone = '62' + normalizedPhone;
+        if (!phoneNumber.includes('@')) {
+            // Normalize phone number (strip non-digits)
+            normalizedPhone = phoneNumber.replace(/\D/g, '');
+
+            // Add country code if not present
+            if (!normalizedPhone.startsWith('62')) {
+                if (normalizedPhone.startsWith('0')) {
+                    normalizedPhone = '62' + normalizedPhone.substring(1);
+                } else {
+                    normalizedPhone = '62' + normalizedPhone;
+                }
             }
+        } else {
+            console.log(`ℹ️ Detected Group/Special ID: ${phoneNumber}, skipping normalization`);
         }
 
         // Try different possible endpoints
