@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const db = require('../src/config/database');
+const db = require('./src/config/database');
 
 async function runMigration() {
     try {
