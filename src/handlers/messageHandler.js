@@ -741,10 +741,14 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     // If session is still active (not cleared above), track this message ID for later deletion
     const currentSession = sessionManager.getSession(phoneNumber);
     if (currentSession && sentResponse && sentResponse.data) {
+        console.log('🔍 DEBUG: Full Send Response:', JSON.stringify(sentResponse.data));
         // Try to handle different ID locations based on library (usually data.id or data.message_id)
         const msgId = sentResponse.data.id || sentResponse.data.message_id || (sentResponse.data.key && sentResponse.data.key.id);
         if (msgId) {
+            console.log(`✅ DEBUG: Captured Bot Message ID: ${msgId}`);
             sessionManager.addBotMessageId(phoneNumber, msgId);
+        } else {
+            console.log('⚠️ DEBUG: Could not find ID in response data');
         }
     }
 
@@ -870,6 +874,7 @@ async function handleRegistrationTglInput(from, body, session, phoneNumber) {
 
 async function cleanupBotMessages(phoneNumber) {
     const ids = sessionManager.getBotMessageIds(phoneNumber);
+    console.log(`🧹 DEBUG: Cleanup Triggered for ${phoneNumber}. Found IDs: ${JSON.stringify(ids)}`);
     if (ids && ids.length > 0) {
         console.log(`🧹 Cleaning up ${ids.length} intermediate messages for ${phoneNumber}`);
         // Delete messages in parallel
