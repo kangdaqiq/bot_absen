@@ -58,22 +58,33 @@ async function handleMessage(req, res) {
             chat_id !== sender_id;
 
         if (isGroupMessage) {
-            const botNumber = whatsapp.BOT_NUMBER;
-            if (!botNumber) {
+            const botNumberConfig = whatsapp.BOT_NUMBER;
+            if (!botNumberConfig) {
                 console.log('⚠️ BOT_NUMBER not set, ignoring group message');
                 return res.json({ success: true, message: 'Group messages ignored (Config missing)' });
             }
 
+            // Normalize bot number to ensure string comparison works
+            // Handle 08x -> 628x, 628x -> 628x, +628x -> 628x
+            let botNumber = botNumberConfig.replace(/\D/g, '');
+            if (botNumber.startsWith('0')) {
+                botNumber = '62' + botNumber.substring(1);
+            }
+
+            // Create variations to check (users might save contact differently)
+            // But WhatsApp usually sends @628... in the raw text
+            const variations = [`@${botNumber}`];
+
             // Check if bot is tagged
-            // We look for @BotNumber in the message body
-            const isTagged = body.includes(`@${botNumber}`);
+            const isTagged = variations.some(tag => body.includes(tag));
+
+            console.log(`🔍 Checking tag: Body="${body}", Target="${botNumber}", Match=${isTagged}`);
 
             if (!isTagged) {
+                // strict check failed
                 console.log(`⏭️ Ignoring untagged group message from chat: ${chat_id}`);
                 return res.json({ success: true, message: 'Group messages ignored (Not tagged)' });
             }
-
-            console.log(`✅ Bot tagged in group message from ${phoneNumber}`);
             // Fall through to check if sender is teacher
         }
 

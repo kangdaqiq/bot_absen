@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS school_settings (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    akhir_absen_pulang TIME DEFAULT '15:00:00',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+INSERT INTO school_settings (akhir_absen_pulang) 
+SELECT '15:00:00' 
+WHERE NOT EXISTS (SELECT * FROM school_settings);
