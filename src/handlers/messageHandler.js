@@ -32,7 +32,7 @@ async function handleMessage(req, res) {
             return res.json({ success: true, message: 'Non-text message ignored' });
         }
 
-        const body = message.text;
+        let body = message.text;
 
         console.log(`📨 Received message from ${pushname}: ${body}`);
 
