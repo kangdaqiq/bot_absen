@@ -57,6 +57,9 @@ async function handleMessage(req, res) {
             chat_id.includes('@lid') ||
             chat_id !== sender_id;
 
+        // Check if there is an active session (for group chat context)
+        const session = sessionManager.getSession(phoneNumber);
+
         if (isGroupMessage) {
             const botNumberConfig = whatsapp.BOT_NUMBER;
             if (!botNumberConfig) {
@@ -81,9 +84,16 @@ async function handleMessage(req, res) {
             console.log(`🔍 Checking tag: Body="${body}", Target="${botNumber}", Match=${isTagged}`);
 
             if (!isTagged) {
-                // strict check failed
-                console.log(`⏭️ Ignoring untagged group message from chat: ${chat_id}`);
-                return res.json({ success: true, message: 'Group messages ignored (Not tagged)' });
+                // If not tagged, check if there's an active session
+                // We allow untagged messages in groups IF the user has an active session
+                // (e.g. waiting for selection 1, 2, 3...)
+                if (session) {
+                    console.log(`ℹ️ Untagged group message allowed due to active session: ${session.step}`);
+                } else {
+                    // strict check failed and no session
+                    console.log(`⏭️ Ignoring untagged group message from chat: ${chat_id}`);
+                    return res.json({ success: true, message: 'Group messages ignored (Not tagged)' });
+                }
             }
 
             // Remove tag from body so command parsing works correctly
@@ -101,7 +111,7 @@ async function handleMessage(req, res) {
         }
 
         // Check if there is an active REGISTRATION session
-        const session = sessionManager.getSession(phoneNumber);
+        // const session = sessionManager.getSession(phoneNumber); // Moved up
         if (session && session.action === 'register') {
             if (session.step === 'input_nis') {
                 await handleRegistrationNISInput(from, body, session, phoneNumber);
