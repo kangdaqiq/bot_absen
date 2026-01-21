@@ -90,9 +90,71 @@ async function sendMessage(phoneNumber, message) {
 }
 
 
+/**
+ * Delete WhatsApp message
+ * @param {string} phoneNumber - Phone number or Group ID
+ * @param {string} messageId - ID of the message to delete
+ */
+async function deleteMessage(phoneNumber, messageId) {
+    try {
+        const endpoints = [
+            '/delete/message',
+            '/api/delete/message',
+            '/api/message/delete',
+            '/message/delete'
+        ];
+
+        const payload = {
+            phone: phoneNumber,
+            messageId: messageId,
+            id: messageId // handle different API variations
+        };
+
+        console.log(`🗑️ Deleting message ${messageId} for ${phoneNumber}`);
+
+        let lastError = null;
+
+        for (const endpoint of endpoints) {
+            try {
+                const url = `${WA_API_URL}${endpoint}`;
+
+                const response = await axios.post(url, payload, {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    auth: {
+                        username: WA_API_USERNAME,
+                        password: WA_API_PASSWORD
+                    },
+                    timeout: 5000
+                });
+
+                if (response.status === 200) {
+                    console.log(`✅ Message deleted successfully via ${endpoint}`);
+                    return { success: true };
+                }
+            } catch (err) {
+                lastError = err;
+                if (err.response?.status !== 404) {
+                    // console.log(`⚠️ Error on ${endpoint}: ${err.message}`);
+                }
+                continue;
+            }
+        }
+
+        console.error(`❌ Failed to delete message. Last error:`, lastError?.message);
+        return { success: false };
+
+    } catch (error) {
+        console.error(`❌ Error deleting message:`, error.message);
+        return { success: false };
+    }
+}
+
 const BOT_NUMBER = process.env.BOT_NUMBER;
 
 module.exports = {
     sendMessage,
+    deleteMessage,
     BOT_NUMBER
 };

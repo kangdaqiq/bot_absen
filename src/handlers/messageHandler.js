@@ -463,6 +463,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                             selectedStudent.nama,
                             selectedStudent.nama_kelas
                         );
+                        await cleanupBotMessages(phoneNumber);
                         sessionManager.clearSession(phoneNumber);
                     }
                 } else if (session.action === 'quick_checkout') {
@@ -472,6 +473,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                     if (!existingAttendance) {
                         // No attendance record found
                         responseMessage = messageService.generateNoAttendanceForCheckout(selectedStudent.nama);
+                        await cleanupBotMessages(phoneNumber);
                         sessionManager.clearSession(phoneNumber);
                     } else if (existingAttendance.jam_pulang) {
                         // Already has jam_pulang, show confirmation
@@ -496,6 +498,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                         } else {
                             responseMessage = messageService.generateNoAttendanceForCheckout(selectedStudent.nama);
                         }
+                        await cleanupBotMessages(phoneNumber);
                         sessionManager.clearSession(phoneNumber);
                     }
                 }
@@ -583,6 +586,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                 );
 
                 // Clear session
+                await cleanupBotMessages(phoneNumber);
                 sessionManager.clearSession(phoneNumber);
             } else {
                 responseMessage = messageService.generateInvalidSelectionMessage(3);
@@ -604,11 +608,13 @@ async function handleTeacherMessage(replyTo, body, teacher) {
         );
 
         responseMessage = messageService.generateDeleteSuccessMessage(session.selectedStudent.nama);
+        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     else if (command === 'confirm_no' && session && session.step === 'confirm_delete') {
         // DELETE: Cancelled
         responseMessage = `❌ *Penghapusan Dibatalkan*\n\nAbsensi tidak jadi dihapus.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
+        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     // HANDLE CONFIRMATION FOR REPLACE CREATE
@@ -624,6 +630,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     else if (command === 'confirm_no' && session && session.step === 'confirm_replace_create') {
         // CREATE: User cancelled replacement
         responseMessage = `❌ *Perubahan Dibatalkan*\n\nAbsensi tidak jadi diubah.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
+        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     // HANDLE CONFIRMATION FOR REPLACE CHECKIN
@@ -631,14 +638,15 @@ async function handleTeacherMessage(replyTo, body, teacher) {
         // CHECKIN: User confirmed to replace existing check-in
         await attendanceService.quickCheckin(session.selectedStudent.id, session.teacherId, session.teacherName);
         responseMessage = messageService.generateQuickCheckinSuccess(
-            session.selectedStudent.nama,
             session.selectedStudent.nama_kelas
         );
+        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     else if (command === 'confirm_no' && session && session.step === 'confirm_replace_checkin') {
         // CHECKIN: User cancelled replacement
         responseMessage = `❌ *Perubahan Dibatalkan*\n\nJam masuk tidak jadi diubah.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
+        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     // HANDLE CONFIRMATION FOR REPLACE CHECKOUT
@@ -656,11 +664,13 @@ async function handleTeacherMessage(replyTo, body, teacher) {
         } else {
             responseMessage = messageService.generateNoAttendanceForCheckout(session.selectedStudent.nama);
         }
+        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     else if (command === 'confirm_no' && session && session.step === 'confirm_replace_checkout') {
         // CHECKOUT: User cancelled replacement
         responseMessage = `❌ *Perubahan Dibatalkan*\n\nJam pulang tidak jadi diubah.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
+        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     // HANDLE TEXT INPUT (KETERANGAN)
@@ -686,6 +696,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
             );
 
             // Clear session
+            await cleanupBotMessages(phoneNumber);
             sessionManager.clearSession(phoneNumber);
         } else {
             responseMessage = `❌ *Keterangan tidak boleh kosong*\n\nSilakan ketik keterangan untuk absensi ini.`;
@@ -710,6 +721,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
             );
 
             // Clear session
+            await cleanupBotMessages(phoneNumber);
             sessionManager.clearSession(phoneNumber);
         } else {
             responseMessage = `❌ *Keterangan tidak boleh kosong*\n\nSilakan ketik keterangan baru.`;
@@ -718,12 +730,23 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     else {
         // Unknown command or no session
         responseMessage = messageService.generateTeacherHelpMessage(teacher.nama);
+        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
 
     // Send response
     console.log(`📤 Sending response to teacher at ${replyTo}`);
-    await whatsapp.sendMessage(replyTo, responseMessage);
+    const sentResponse = await whatsapp.sendMessage(replyTo, responseMessage);
+
+    // If session is still active (not cleared above), track this message ID for later deletion
+    const currentSession = sessionManager.getSession(phoneNumber);
+    if (currentSession && sentResponse && sentResponse.data) {
+        // Try to handle different ID locations based on library (usually data.id or data.message_id)
+        const msgId = sentResponse.data.id || sentResponse.data.message_id || (sentResponse.data.key && sentResponse.data.key.id);
+        if (msgId) {
+            sessionManager.addBotMessageId(phoneNumber, msgId);
+        }
+    }
 
     return {
         success: true,
@@ -842,6 +865,15 @@ async function handleRegistrationTglInput(from, body, session, phoneNumber) {
         const message = messageService.generateErrorMessage();
         await whatsapp.sendMessage(from, message);
         sessionManager.clearSession(phoneNumber);
+    }
+}
+
+async function cleanupBotMessages(phoneNumber) {
+    const ids = sessionManager.getBotMessageIds(phoneNumber);
+    if (ids && ids.length > 0) {
+        console.log(`🧹 Cleaning up ${ids.length} intermediate messages for ${phoneNumber}`);
+        // Delete messages in parallel
+        await Promise.all(ids.map(id => whatsapp.deleteMessage(phoneNumber, id)));
     }
 }
 

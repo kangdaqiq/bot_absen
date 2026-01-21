@@ -75,8 +75,31 @@ async function cleanupExpiredSessions() {
 // Run cleanup every 30 seconds
 setInterval(cleanupExpiredSessions, 30 * 1000);
 
+/**
+ * Add a bot message ID to the session for later deletion
+ */
+function addBotMessageId(phoneNumber, messageId) {
+    const session = getSession(phoneNumber);
+    if (session) {
+        if (!session.botMessageIds) {
+            session.botMessageIds = [];
+        }
+        session.botMessageIds.push(messageId);
+    }
+}
+
+/**
+ * Get all bot message IDs from session
+ */
+function getBotMessageIds(phoneNumber) {
+    const session = getSession(phoneNumber);
+    return session && session.botMessageIds ? session.botMessageIds : [];
+}
+
 module.exports = {
     setSession,
     getSession,
-    clearSession
+    clearSession,
+    addBotMessageId,
+    getBotMessageIds
 };
