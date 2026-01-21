@@ -743,7 +743,8 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     if (currentSession && sentResponse && sentResponse.data) {
         console.log('🔍 DEBUG: Full Send Response:', JSON.stringify(sentResponse.data));
         // Try to handle different ID locations based on library (usually data.id or data.message_id)
-        const msgId = sentResponse.data.id || sentResponse.data.message_id || (sentResponse.data.key && sentResponse.data.key.id);
+        // Log received: {"results":{"message_id":"..."}}
+        const msgId = sentResponse.data.results?.message_id || sentResponse.data.id || sentResponse.data.message_id || (sentResponse.data.key && sentResponse.data.key.id);
         if (msgId) {
             console.log(`✅ DEBUG: Captured Bot Message ID: ${msgId}`);
             sessionManager.addBotMessageId(phoneNumber, msgId);
