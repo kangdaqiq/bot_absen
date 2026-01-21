@@ -85,6 +85,14 @@ async function handleMessage(req, res) {
                 console.log(`⏭️ Ignoring untagged group message from chat: ${chat_id}`);
                 return res.json({ success: true, message: 'Group messages ignored (Not tagged)' });
             }
+
+            // Remove tag from body so command parsing works correctly
+            // e.g. "@628123 command" -> "command"
+            variations.forEach(tag => {
+                body = body.replace(tag, '').trim();
+            });
+            console.log(`🧹 Cleaned body: "${body}"`);
+
             // Fall through to check if sender is teacher
         }
 
