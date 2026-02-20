@@ -290,7 +290,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     // Handle commands based on session state
     if (command === 'teacher_help') {
         // Clear any existing session
-        sessionManager.clearSession(senderPhone);
+        sessionManager.clearSession(phoneNumber);
         responseMessage = messageService.generateTeacherHelpMessage(teacher.nama);
     }
     // CREATE ATTENDANCE FLOW
