@@ -111,6 +111,12 @@ function parseTeacherCommand(message) {
         return { command: 'search_student', searchTerm: absenMatch[1] };
     }
 
+    // Check for student recap: "rekap [nama]"
+    const rekapMatch = text.match(/^rekap\s+(.+)$/);
+    if (rekapMatch) {
+        return { command: 'recap_student', searchTerm: rekapMatch[1] };
+    }
+
     // Check for confirmation: "ya" or "tidak"
     if (text === 'ya' || text === 'yes') {
         return { command: 'confirm_yes' };
@@ -327,8 +333,11 @@ Selamat datang di *Bot Absensi SMK Assuniyah* 🎓
    
 6️⃣ *Hapus Absensi*
    Ketik: \`hapus absen [nama siswa]\`
+
+7️⃣ *Rekap Siswa (Bulan Ini)*
+   Ketik: \`rekap [nama siswa]\`
    
-7️⃣ *Menu Bantuan*
+8️⃣ *Menu Bantuan*
    Ketik: \`help\` atau \`menu\`
 
 💡 _Cukup ketik perintah di atas untuk menggunakan bot ini._

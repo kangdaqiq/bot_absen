@@ -395,6 +395,22 @@ async function handleTeacherMessage(replyTo, body, teacher) {
             });
         }
     }
+    // RECAP STUDENT FLOW
+    else if (command === 'recap_student') {
+        const students = await attendanceService.searchStudentsByName(searchTerm);
+        responseMessage = messageService.generateStudentSearchResults(students, searchTerm);
+
+        if (students.length > 0) {
+            sessionManager.setSession(phoneNumber, {
+                type: 'teacher',
+                action: 'recap_student',
+                step: 'select_student',
+                searchResults: students,
+                teacherId: teacher.id,
+                teacherName: teacher.nama
+            });
+        }
+    }
     // HANDLE OPTION SELECTION
     else if (command === 'select_option' && session) {
         if (session.step === 'select_student') {
@@ -501,6 +517,13 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                         await cleanupBotMessages(phoneNumber);
                         sessionManager.clearSession(phoneNumber);
                     }
+                } else if (session.action === 'recap_student') {
+                    // RECAP STUDENT: Show monthly recap for selected student
+                    const stats = await attendanceService.getAttendanceRecap(selectedStudent.id, 'month');
+                    responseMessage = messageService.generateRecapMessage(selectedStudent, stats, 'month');
+
+                    await cleanupBotMessages(phoneNumber);
+                    sessionManager.clearSession(phoneNumber);
                 }
             } else {
                 responseMessage = messageService.generateInvalidSelectionMessage(session.searchResults.length);
