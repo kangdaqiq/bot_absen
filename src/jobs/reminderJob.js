@@ -7,33 +7,19 @@ const moment = require('moment-timezone');
 moment.tz.setDefault('Asia/Jakarta');
 
 /**
- * Get school checkout time from database
+ * Fetch active schedules from the jadwal table
  */
-async function getSchoolCheckoutTime() {
+async function getActiveSchedules() {
     try {
-        // Query school settings for checkout time
-        // Adjust table/column names based on your actual schema
         const [rows] = await db.query(`
-            SELECT akhir_absen_pulang 
-            FROM school_settings 
-            LIMIT 1
+            SELECT hari, index_hari, jam_pulang 
+            FROM jadwal 
+            WHERE is_active = 1
         `);
-
-        if (rows.length > 0 && rows[0].akhir_absen_pulang) {
-            // Parse time (format: HH:mm:ss)
-            const time = moment(rows[0].akhir_absen_pulang, 'HH:mm:ss');
-            return {
-                hour: time.hour(),
-                minute: time.minute()
-            };
-        }
-
-        // Default fallback: 15:00 (3 PM)
-        return { hour: 15, minute: 0 };
+        return rows;
     } catch (error) {
-        console.error('❌ Error getting school checkout time:', error);
-        // Fallback to default
-        return { hour: 15, minute: 0 };
+        console.error('❌ Error getting schedules from database:', error);
+        return [];
     }
 }
 
@@ -163,22 +149,37 @@ async function sendCheckoutReminders() {
  */
 async function startReminderScheduler() {
     try {
-        // Get school checkout time
-        const checkoutTime = await getSchoolCheckoutTime();
+        // Get active schedules
+        const schedules = await getActiveSchedules();
+
+        if (schedules.length === 0) {
+            console.log('⚠️ No active schedule found in jadwal table for reminders.');
+            return;
+        }
 
         console.log('📅 Checkout reminder scheduler started');
-        console.log(`⏰ Scheduled to run daily at ${String(checkoutTime.hour).padStart(2, '0')}:${String(checkoutTime.minute).padStart(2, '0')} (Asia/Jakarta)`);
 
-        // Schedule reminder at checkout time
-        cron.schedule(`${checkoutTime.minute} ${checkoutTime.hour} * * *`, () => {
-            sendCheckoutReminders();
-        }, {
-            timezone: 'Asia/Jakarta'
+        schedules.forEach(schedule => {
+            if (schedule.jam_pulang) {
+                // Parse time (format: HH:mm:ss)
+                const time = moment(schedule.jam_pulang, 'HH:mm:ss');
+                const hour = time.hour();
+                const minute = time.minute();
+
+                // standard node-cron day of week mapping: 1-7 or 0-6 where 0 or 7 is Sunday.
+                // The table has index_hari 1 for Senin, up to 7 for Minggu
+                // node-cron accepts 1-7 mapping directly (1=Monday... 7=Sunday)
+                let cronDay = schedule.index_hari;
+
+                console.log(`⏰ Scheduled for ${schedule.hari} (Day ${cronDay}) at ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} (Asia/Jakarta)`);
+
+                cron.schedule(`${minute} ${hour} * * ${cronDay}`, () => {
+                    sendCheckoutReminders();
+                }, {
+                    timezone: 'Asia/Jakarta'
+                });
+            }
         });
-
-        // Optional: Run immediately on startup for testing
-        // Uncomment to test on server start
-        // await sendCheckoutReminders();
 
     } catch (error) {
         console.error('❌ Failed to start reminder scheduler:', error);
