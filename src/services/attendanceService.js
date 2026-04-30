@@ -8,7 +8,7 @@ moment.tz.setDefault('Asia/Jakarta');
 /**
  * Get student by phone number
  */
-async function getStudentByPhone(phoneNumber) {
+async function getStudentByPhone(phoneNumber, schoolId) {
     try {
         // Normalize phone number for comparison
         let normalizedPhone = phoneNumber.replace(/\D/g, '');
@@ -26,9 +26,9 @@ async function getStudentByPhone(phoneNumber) {
             `SELECT s.*, k.nama_kelas 
              FROM siswa s 
              LEFT JOIN kelas k ON s.kelas_id = k.id 
-             WHERE s.no_wa IN (?) 
+             WHERE s.no_wa IN (?) AND s.school_id = ? 
              LIMIT 1`,
-            [phoneVariants]
+            [phoneVariants, schoolId]
         );
 
         return rows.length > 0 ? rows[0] : null;
@@ -41,7 +41,7 @@ async function getStudentByPhone(phoneNumber) {
 /**
  * Get today's attendance for a student
  */
-async function getTodayAttendance(studentId) {
+async function getTodayAttendance(studentId, schoolId) {
     try {
         const today = moment().format('YYYY-MM-DD');
 
@@ -61,7 +61,7 @@ async function getTodayAttendance(studentId) {
 /**
  * Get attendance recap for a student
  */
-async function getAttendanceRecap(studentId, period = 'today') {
+async function getAttendanceRecap(studentId, period = 'today', schoolId) {
     try {
         let startDate, endDate;
         const now = moment();
@@ -141,7 +141,7 @@ function formatDuration(seconds) {
 /**
  * Get teacher by phone number
  */
-async function getTeacherByPhone(phoneNumber) {
+async function getTeacherByPhone(phoneNumber, schoolId) {
     try {
         // Normalize phone number for comparison
         let normalizedPhone = phoneNumber.replace(/\D/g, '');
@@ -157,9 +157,9 @@ async function getTeacherByPhone(phoneNumber) {
 
         const [rows] = await db.query(
             `SELECT * FROM guru 
-             WHERE no_wa IN (?) 
+             WHERE no_wa IN (?) AND school_id = ? 
              LIMIT 1`,
-            [phoneVariants]
+            [phoneVariants, schoolId]
         );
 
         return rows.length > 0 ? rows[0] : null;
@@ -172,16 +172,16 @@ async function getTeacherByPhone(phoneNumber) {
 /**
  * Search students by name (fuzzy search)
  */
-async function searchStudentsByName(searchTerm) {
+async function searchStudentsByName(searchTerm, schoolId) {
     try {
         const [rows] = await db.query(
             `SELECT s.*, k.nama_kelas 
              FROM siswa s 
              LEFT JOIN kelas k ON s.kelas_id = k.id 
-             WHERE s.nama LIKE ? 
+             WHERE s.nama LIKE ? AND s.school_id = ? 
              ORDER BY s.nama 
              LIMIT 10`,
-            [`%${searchTerm}%`]
+            [`%${searchTerm}%`, schoolId]
         );
 
         return rows;
@@ -194,7 +194,7 @@ async function searchStudentsByName(searchTerm) {
 /**
  * Create manual attendance record
  */
-async function createManualAttendance(studentId, status, teacherId, teacherName, keterangan) {
+async function createManualAttendance(studentId, status, teacherId, teacherName, keterangan, schoolId) {
     try {
         const today = moment().format('YYYY-MM-DD');
         const now = moment().format('HH:mm:ss');
@@ -269,10 +269,18 @@ async function createManualAttendance(studentId, status, teacherId, teacherName,
                     teacherName
                 );
 
-                await whatsapp.sendMessage(student.no_wa, notificationMessage);
+                await whatsapp.sendMessage(student.no_wa, notificationMessage, schoolId);
                 console.log(`✅ Notification sent to student ${student.nama} (${student.no_wa})`);
             } else {
                 console.log(`⚠️ Student has no WhatsApp number registered, skipping notification`);
+            }
+                    // Send to parent
+            if (studentData[0].wa_ortu) {
+                const parentMsg = messageService.generateParentAttendanceNotification(
+                    student.nama, student.nama_kelas, status, finalKeterangan, teacherName
+                );
+                await whatsapp.sendMessage(studentData[0].wa_ortu, parentMsg, schoolId);
+                console.log(`✅ Attendance notification sent to parent of ${student.nama}`);
             }
         } catch (notifError) {
             // Log error but don't throw - attendance should still be saved
@@ -289,7 +297,7 @@ async function createManualAttendance(studentId, status, teacherId, teacherName,
 /**
  * Search students with attendance today (for edit/delete)
  */
-async function searchStudentsWithAttendanceToday(searchTerm) {
+async function searchStudentsWithAttendanceToday(searchTerm, schoolId) {
     try {
         const today = moment().format('YYYY-MM-DD');
 
@@ -298,10 +306,10 @@ async function searchStudentsWithAttendanceToday(searchTerm) {
              FROM siswa s 
              LEFT JOIN kelas k ON s.kelas_id = k.id 
              INNER JOIN attendance a ON s.id = a.student_id AND a.tanggal = ?
-             WHERE s.nama LIKE ? 
+             WHERE s.nama LIKE ? AND s.school_id = ?
              ORDER BY s.nama 
              LIMIT 10`,
-            [today, `%${searchTerm}%`]
+            [today, `%${searchTerm}%`, schoolId]
         );
 
         return rows;
@@ -314,7 +322,7 @@ async function searchStudentsWithAttendanceToday(searchTerm) {
 /**
  * Get student attendance today
  */
-async function getStudentAttendanceToday(studentId) {
+async function getStudentAttendanceToday(studentId, schoolId) {
     try {
         const today = moment().format('YYYY-MM-DD');
 
@@ -337,7 +345,7 @@ async function getStudentAttendanceToday(studentId) {
 /**
  * Update attendance status
  */
-async function updateAttendanceStatus(studentId, status, teacherName) {
+async function updateAttendanceStatus(studentId, status, teacherName, schoolId) {
     try {
         const today = moment().format('YYYY-MM-DD');
         const keterangan = `Status diubah oleh ${teacherName}`;
@@ -349,6 +357,31 @@ async function updateAttendanceStatus(studentId, status, teacherName) {
             [status, keterangan, studentId, today]
         );
 
+        // Send notification to student and parent
+        try {
+            const [stdData] = await db.query(
+                `SELECT s.*, k.nama_kelas FROM siswa s LEFT JOIN kelas k ON s.kelas_id = k.id WHERE s.id = ?`,
+                [studentId]
+            );
+            if (stdData.length > 0) {
+                const std = stdData[0];
+                const statusLabels = { 'H': 'Hadir', 'I': 'Izin', 'S': 'Sakit', 'A': 'Alpha' };
+                if (std.no_wa) {
+                    const sMsg = `✏️ *Absensi Anda Diperbarui*\n\nStatus baru: *${statusLabels[status] || status}*\nOleh: ${teacherName}`;
+                    await whatsapp.sendMessage(std.no_wa, sMsg, schoolId);
+                }
+                if (std.wa_ortu) {
+                    const pMsg = messageService.generateParentEditNotification(
+                        std.nama, std.nama_kelas, status, keterangan, teacherName
+                    );
+                    await whatsapp.sendMessage(std.wa_ortu, pMsg, schoolId);
+                    console.log(`✅ Edit notification sent to parent of ${std.nama}`);
+                }
+            }
+        } catch (notifErr) {
+            console.error('⚠️ Failed to send edit notification:', notifErr.message);
+        }
+
         return true;
     } catch (error) {
         console.error('Error updating attendance status:', error);
@@ -359,7 +392,7 @@ async function updateAttendanceStatus(studentId, status, teacherName) {
 /**
  * Update attendance keterangan
  */
-async function updateAttendanceKeterangan(studentId, keterangan, teacherName) {
+async function updateAttendanceKeterangan(studentId, keterangan, teacherName, schoolId) {
     try {
         const today = moment().format('YYYY-MM-DD');
         const finalKeterangan = `${keterangan} (diubah oleh ${teacherName})`;
@@ -381,7 +414,7 @@ async function updateAttendanceKeterangan(studentId, keterangan, teacherName) {
 /**
  * Delete attendance today
  */
-async function deleteAttendanceToday(studentId, teacherName) {
+async function deleteAttendanceToday(studentId, teacherName, schoolId) {
     try {
         const today = moment().format('YYYY-MM-DD');
 
@@ -401,7 +434,7 @@ async function deleteAttendanceToday(studentId, teacherName) {
 /**
  * Quick check-in (masuk) - Record jam_masuk and set status to Hadir
  */
-async function quickCheckin(studentId, teacherId, teacherName) {
+async function quickCheckin(studentId, teacherId, teacherName, schoolId) {
     try {
         const today = moment().format('YYYY-MM-DD');
         const now = moment().format('HH:mm:ss');
@@ -452,10 +485,18 @@ async function quickCheckin(studentId, teacherId, teacherName) {
                     teacherName
                 );
 
-                await whatsapp.sendMessage(student.no_wa, notificationMessage);
+                await whatsapp.sendMessage(student.no_wa, notificationMessage, schoolId);
                 console.log(`✅ Check-in notification sent to student ${student.nama} (${student.no_wa})`);
             } else {
                 console.log(`⚠️ Student has no WhatsApp number registered, skipping notification`);
+            }
+                    // Send to parent
+            if (studentData[0].wa_ortu) {
+                const parentMsg = messageService.generateParentCheckinNotification(
+                    student.nama, student.nama_kelas, teacherName
+                );
+                await whatsapp.sendMessage(studentData[0].wa_ortu, parentMsg, schoolId);
+                console.log(`✅ Check-in notification sent to parent of ${student.nama}`);
             }
         } catch (notifError) {
             // Log error but don't throw - attendance should still be saved
@@ -472,7 +513,7 @@ async function quickCheckin(studentId, teacherId, teacherName) {
 /**
  * Quick check-out (pulang) - Record jam_pulang only
  */
-async function quickCheckout(studentId, teacherName) {
+async function quickCheckout(studentId, teacherName, schoolId) {
     try {
         const today = moment().format('YYYY-MM-DD');
         const now = moment().format('HH:mm:ss');
@@ -516,10 +557,18 @@ async function quickCheckout(studentId, teacherName) {
                     teacherName
                 );
 
-                await whatsapp.sendMessage(student.no_wa, notificationMessage);
+                await whatsapp.sendMessage(student.no_wa, notificationMessage, schoolId);
                 console.log(`✅ Check-out notification sent to student ${student.nama} (${student.no_wa})`);
             } else {
                 console.log(`⚠️ Student has no WhatsApp number registered, skipping notification`);
+            }
+                    // Send to parent
+            if (studentData[0].wa_ortu) {
+                const parentMsg = messageService.generateParentCheckoutNotification(
+                    student.nama, student.nama_kelas, existing[0].jam_masuk, teacherName
+                );
+                await whatsapp.sendMessage(studentData[0].wa_ortu, parentMsg, schoolId);
+                console.log(`✅ Check-out notification sent to parent of ${student.nama}`);
             }
         } catch (notifError) {
             // Log error but don't throw - attendance should still be saved
@@ -536,15 +585,15 @@ async function quickCheckout(studentId, teacherName) {
 /**
  * Get student by NIS (for partial verification)
  */
-async function getStudentByNIS(nis) {
+async function getStudentByNIS(nis, schoolId) {
     try {
         const [rows] = await db.query(
             `SELECT s.*, k.nama_kelas 
              FROM siswa s 
              LEFT JOIN kelas k ON s.kelas_id = k.id 
-             WHERE s.nis = ? 
+             WHERE s.nis = ? AND s.school_id = ? 
              LIMIT 1`,
-            [nis]
+            [nis, schoolId]
         );
 
         return rows.length > 0 ? rows[0] : null;
@@ -557,16 +606,16 @@ async function getStudentByNIS(nis) {
 /**
  * Get student by NIS and Date of Birth
  */
-async function getStudentByNISAndDate(nis, tglLahir) {
+async function getStudentByNISAndDate(nis, tglLahir, schoolId) {
     try {
         // Query assumed tgl_lahir column based on user instruction
         const [rows] = await db.query(
             `SELECT s.*, k.nama_kelas 
              FROM siswa s 
              LEFT JOIN kelas k ON s.kelas_id = k.id 
-             WHERE s.nis = ? AND s.tgl_lahir = ? 
+             WHERE s.nis = ? AND s.tgl_lahir = ? AND s.school_id = ? 
              LIMIT 1`,
-            [nis, tglLahir]
+            [nis, tglLahir, schoolId]
         );
 
         return rows.length > 0 ? rows[0] : null;
@@ -579,7 +628,7 @@ async function getStudentByNISAndDate(nis, tglLahir) {
 /**
  * Register student phone number
  */
-async function registerStudentPhone(studentId, phoneNumber) {
+async function registerStudentPhone(studentId, phoneNumber, schoolId) {
     try {
         // Normalize phone number
         let normalizedPhone = phoneNumber.replace(/\D/g, '');
@@ -606,16 +655,16 @@ async function registerStudentPhone(studentId, phoneNumber) {
 /**
  * Search student contact info
  */
-async function searchStudentContact(searchTerm) {
+async function searchStudentContact(searchTerm, schoolId) {
     try {
         const [rows] = await db.query(
             `SELECT s.id, s.nama, s.nis, s.no_wa, s.wa_ortu, k.nama_kelas 
              FROM siswa s 
              LEFT JOIN kelas k ON s.kelas_id = k.id 
-             WHERE s.nama LIKE ? OR s.nis LIKE ? 
+             WHERE (s.nama LIKE ? OR s.nis LIKE ?) AND s.school_id = ? 
              ORDER BY s.nama 
              LIMIT 5`,
-            [`%${searchTerm}%`, `%${searchTerm}%`]
+            [`%${searchTerm}%`, `%${searchTerm}%`, schoolId]
         );
 
         return rows;

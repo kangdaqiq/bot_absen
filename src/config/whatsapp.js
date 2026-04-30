@@ -5,12 +5,37 @@ const WA_API_URL = process.env.WA_API_URL || 'http://localhost:3000';
 const WA_API_USERNAME = process.env.WA_API_USERNAME || 'admin';
 const WA_API_PASSWORD = process.env.WA_API_PASSWORD || 'admin';
 
+let deviceCache = {};
+let lastCacheTime = 0;
+
+async function resolveDeviceId(deviceId) {
+    if (/^\d+$/.test(deviceId) && deviceId.length < 5) return deviceId;
+    if (Date.now() - lastCacheTime > 60000) {
+        try {
+            const res = await axios.get(WA_API_URL + '/devices');
+            if (res.data && res.data.results) {
+                const newCache = {};
+                res.data.results.forEach(d => {
+                    newCache[d.jid] = d.id;
+                    if (d.jid) newCache[d.jid.split('@')[0]] = d.id;
+                });
+                deviceCache = newCache;
+                lastCacheTime = Date.now();
+            }
+        } catch (e) {
+            console.error('Failed to fetch devices:', e.message);
+        }
+    }
+    return deviceCache[deviceId] || deviceId;
+}
+
+
 /**
  * Send WhatsApp message
  * @param {string} phoneNumber - Phone number with country code (e.g., 6281234567890)
  * @param {string} message - Message text
  */
-async function sendMessage(phoneNumber, message) {
+async function sendMessage(phoneNumber, message, deviceId = '1') {
     try {
         // Check if it's a Group ID or already formatted ID (contains @)
         let normalizedPhone = phoneNumber;
@@ -44,7 +69,8 @@ async function sendMessage(phoneNumber, message) {
             message: message
         };
 
-        console.log(`📤 Sending message to ${normalizedPhone}`);
+        const resolvedDeviceId = await resolveDeviceId(deviceId);
+        console.log(`📤 Sending message to ${normalizedPhone} via Device ID ${resolvedDeviceId}`);
 
         let lastError = null;
 
@@ -55,7 +81,8 @@ async function sendMessage(phoneNumber, message) {
 
                 const response = await axios.post(url, payload, {
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'X-Device-Id': resolvedDeviceId
                     },
                     auth: {
                         username: WA_API_USERNAME,
@@ -95,7 +122,7 @@ async function sendMessage(phoneNumber, message) {
  * @param {string} phoneNumber - Phone number or Group ID
  * @param {string} messageId - ID of the message to delete
  */
-async function deleteMessage(phoneNumber, messageId) {
+async function deleteMessage(phoneNumber, messageId, deviceId = '1') {
     try {
         // Ensure proper suffix for deletion
         let formattedPhone = phoneNumber;
@@ -124,7 +151,8 @@ async function deleteMessage(phoneNumber, messageId) {
             id: messageId // handle different API variations
         };
 
-        console.log(`🗑️ Deleting message ${messageId} for ${formattedPhone}`);
+        const resolvedDeviceId = await resolveDeviceId(deviceId);
+        console.log(`🗑️ Deleting message ${messageId} for ${formattedPhone} via Device ID ${resolvedDeviceId}`);
 
         let lastError = null;
 
@@ -134,7 +162,8 @@ async function deleteMessage(phoneNumber, messageId) {
 
                 const response = await axios.post(url, payload, {
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'X-Device-Id': resolvedDeviceId
                     },
                     auth: {
                         username: WA_API_USERNAME,
@@ -170,5 +199,6 @@ const BOT_NUMBER = process.env.BOT_NUMBER;
 module.exports = {
     sendMessage,
     deleteMessage,
+    resolveDeviceId,
     BOT_NUMBER
 };

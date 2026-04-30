@@ -383,11 +383,12 @@ Siswa: *${studentName}*
 
 Pilih status absensi:
 
-1️⃣ Izin
-2️⃣ Sakit
-3️⃣ Alpha
+1️⃣ Hadir
+2️⃣ Izin
+3️⃣ Sakit
+4️⃣ Alpha
 
-💡 _Balas dengan nomor status (1-3)_`;
+💡 _Balas dengan nomor status (1-4)_`;
 }
 
 /**
@@ -923,6 +924,45 @@ function generateCheckoutReminderMessage(teacherName, students) {
     return message;
 }
 
+/**
+ * Generate parent notification for manual attendance
+ */
+function generateParentAttendanceNotification(studentName, studentClass, status, keterangan, teacherName) {
+    const statusEmoji = { 'H': '✅', 'I': '📝', 'S': '🤒', 'A': '❌', 'B': '🚫' };
+    const statusText = { 'H': 'Hadir', 'I': 'Izin', 'S': 'Sakit', 'A': 'Alpha', 'B': 'Bolos' };
+    const today = moment().format('dddd, DD MMMM YYYY');
+    const now = moment().format('HH:mm');
+    return `${statusEmoji[status] || '📋'} *Notifikasi Absensi Siswa*\n\n🏫 Yth. Wali Murid *${studentName}*\n\n👤 Nama: *${studentName}*\n📚 Kelas: ${studentClass || '-'}\n📅 Tanggal: ${today}\n⏰ Jam: ${now}\n📊 Status: *${statusText[status] || status}*\n📝 Keterangan: ${keterangan}\n👨‍🏫 Dicatat oleh: ${teacherName}\n\n_Terima kasih atas perhatiannya._`;
+}
+
+/**
+ * Generate parent notification for check-in
+ */
+function generateParentCheckinNotification(studentName, studentClass, teacherName) {
+    const today = moment().format('dddd, DD MMMM YYYY');
+    const now = moment().format('HH:mm');
+    return `✅ *Notifikasi Absen Masuk*\n\n🏫 Yth. Wali Murid *${studentName}*\n\n👤 Nama: *${studentName}*\n📚 Kelas: ${studentClass || '-'}\n📅 Tanggal: ${today}\n⏰ Jam Masuk: ${now}\n📊 Status: *Hadir*\n👨‍🏫 Dicatat oleh: ${teacherName}\n\n_Terima kasih atas perhatiannya._`;
+}
+
+/**
+ * Generate parent notification for check-out
+ */
+function generateParentCheckoutNotification(studentName, studentClass, jamMasuk, teacherName) {
+    const today = moment().format('dddd, DD MMMM YYYY');
+    const now = moment().format('HH:mm');
+    const jamMasukFormatted = jamMasuk ? moment(jamMasuk, 'HH:mm:ss').format('HH:mm') : '-';
+    return `🏠 *Notifikasi Absen Pulang*\n\n🏫 Yth. Wali Murid *${studentName}*\n\n👤 Nama: *${studentName}*\n📚 Kelas: ${studentClass || '-'}\n📅 Tanggal: ${today}\n⏰ Jam Masuk: ${jamMasukFormatted}\n🏠 Jam Pulang: ${now}\n👨‍🏫 Dicatat oleh: ${teacherName}\n\n_Hati-hati di jalan. Terima kasih._`;
+}
+
+/**
+ * Generate parent notification for edit attendance
+ */
+function generateParentEditNotification(studentName, studentClass, status, keterangan, teacherName) {
+    const statusText = { 'H': 'Hadir', 'I': 'Izin', 'S': 'Sakit', 'A': 'Alpha', 'B': 'Bolos' };
+    const today = moment().format('dddd, DD MMMM YYYY');
+    return `✏️ *Notifikasi Perubahan Absensi*\n\n🏫 Yth. Wali Murid *${studentName}*\n\n👤 Nama: *${studentName}*\n📚 Kelas: ${studentClass || '-'}\n📅 Tanggal: ${today}\n📊 Status Baru: *${statusText[status] || status}*\n📝 Keterangan: ${keterangan || '-'}\n👨‍🏫 Diubah oleh: ${teacherName}\n\n_Terima kasih atas perhatiannya._`;
+}
+
 module.exports = {
     parseCommand,
     parseTeacherCommand,
@@ -956,6 +996,11 @@ module.exports = {
     generateStudentAttendanceNotification,
     generateStudentCheckinNotification,
     generateStudentCheckoutNotification,
+    // Parent notifications
+    generateParentAttendanceNotification,
+    generateParentCheckinNotification,
+    generateParentCheckoutNotification,
+    generateParentEditNotification,
     // Confirmation messages
     generateAttendanceExistsConfirmation,
     generateCheckinExistsConfirmation,

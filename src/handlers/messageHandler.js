@@ -24,7 +24,20 @@ const moment = require('moment-timezone');
  */
 async function handleMessage(req, res) {
     try {
-        const { chat_id, from, message, pushname, sender_id } = req.body;
+        let webhookData = req.body;
+        let rawDeviceId = req.headers['x-device-id'] || req.query.device_id || process.env.WA_DEVICE_ID || '1';
+        if (webhookData.event === 'message' && webhookData.payload) {
+            rawDeviceId = webhookData.device_id || rawDeviceId;
+            webhookData = webhookData.payload;
+        } else if (webhookData.device_id) {
+            rawDeviceId = webhookData.device_id;
+        }
+        const deviceId = await whatsapp.resolveDeviceId(rawDeviceId);
+        console.log(`🔌 Resolved Device ID: ${rawDeviceId} -> ${deviceId}`);
+        if (webhookData.body && !webhookData.message) webhookData.message = { text: webhookData.body };
+        if (webhookData.from_name && !webhookData.pushname) webhookData.pushname = webhookData.from_name;
+        if (!webhookData.sender_id) webhookData.sender_id = webhookData.from;
+        const { chat_id, from, message, pushname, sender_id } = webhookData;
 
         // Validate required fields
         if (!message || !message.text) {
@@ -113,90 +126,28 @@ async function handleMessage(req, res) {
         // Check if there is an active REGISTRATION session
         // const session = sessionManager.getSession(phoneNumber); // Moved up
         if (session && session.action === 'register') {
-            if (session.step === 'input_nis') {
-                await handleRegistrationNISInput(from, body, session, phoneNumber);
-            } else if (session.step === 'input_tgl') {
-                await handleRegistrationTglInput(from, body, session, phoneNumber);
-            }
-            return res.json({ success: true, message: 'Registration session processed' });
+            sessionManager.clearSession(phoneNumber);
         }
 
         // Check if sender is a teacher
-        const teacher = await attendanceService.getTeacherByPhone(phoneNumber);
+        const teacher = await attendanceService.getTeacherByPhone(phoneNumber, deviceId);
 
         if (teacher) {
             console.log(`👨‍🏫 Teacher found: ${teacher.nama}`);
             const replyTo = isGroupMessage ? chat_id : phoneNumber;
-            const result = await handleTeacherMessage(replyTo, body, teacher);
+            const result = await handleTeacherMessage(replyTo, body, teacher, deviceId);
             return res.json(result);
         }
 
-        // If it's a group message and NOT a teacher (since we passed the check above), ignore it
-        // User Requirement: "khusus untuk guru yang direspon, murid engga"
+        // If it's a group message and NOT a teacher, ignore it
         if (isGroupMessage) {
             console.log(`⏭️ Ignoring non-teacher message in group from ${phoneNumber}`);
             return res.json({ success: true, message: 'Group message from non-teacher ignored' });
         }
 
-        // Check if sender is a student
-        const student = await attendanceService.getStudentByPhone(phoneNumber);
-
-        if (!student) {
-            // Check for Registration Command
-            if (body.trim().toLowerCase() === 'daftar') {
-                // Check if sender is already registered as STUDENT (double check)
-                const existingStudent = await attendanceService.getStudentByPhone(from);
-                if (existingStudent) {
-                    const message = messageService.generateRegistrationError('already_registered');
-                    await whatsapp.sendMessage(from, message);
-                    return res.json({ success: true, message: 'Already registered as student' });
-                }
-
-                // Check if sender is already registered as TEACHER
-                const existingTeacher = await attendanceService.getTeacherByPhone(from);
-                if (existingTeacher) {
-                    const message = messageService.generateRegistrationError('already_registered');
-                    await whatsapp.sendMessage(from, message);
-                    return res.json({ success: true, message: 'Already registered as teacher' });
-                }
-
-                // Start registration session
-                sessionManager.setSession(phoneNumber, {
-                    action: 'register',
-                    step: 'input_nis',
-                    timestamp: Date.now()
-                });
-
-                const message = messageService.generateRegistrationAskNIS();
-                await whatsapp.sendMessage(from, message);
-                return res.json({ success: true, message: 'Registration started' });
-            }
-
-            console.log(`❌ User not found for phone: ${phoneNumber}`);
-            const responseMessage = messageService.generateHelpMessage('Pendaftar'); // Use a generic name or separate message
-            // Or better, stick to not registered message but maybe tweak it?
-            // Actually, for now let's keep generateNotRegisteredMessage but update what it says if needed. 
-            // The previous code used generateNotRegisteredMessage().
-
-            // If the user sends 'help' but is not registered, show registration help
-            if (body.trim().toLowerCase() === 'help' || body.trim().toLowerCase() === 'info') {
-                const message = messageService.generateRegistrationHelpMessage();
-                await whatsapp.sendMessage(from, message);
-                return res.json({ success: true, message: 'Registration help sent' });
-            }
-
-            const message = messageService.generateRegistrationHelpMessage(); // Default to registration help for unknown users?
-            // Or Keep "Not Registered"?
-            // User requested: "jika ada nomor baru wa, bot akan langsung wa untuk melakukan pendaftaran"
-            // implying any message triggers registration prompt/help.
-
-            await whatsapp.sendMessage(phoneNumber, message);
-            return res.json({ success: true, message: 'Not registered response sent' });
-        }
-
-        console.log(`👨‍🎓 Student found: ${student.nama} (${student.nis})`);
-        const result = await handleStudentMessage(phoneNumber, body, student);
-        return res.json(result);
+        // Non-teacher private message — bot hanya untuk guru, abaikan
+        console.log(`⏭️ Ignoring non-teacher private message from ${phoneNumber}`);
+        return res.json({ success: true, message: 'Non-teacher message ignored' });
 
     } catch (error) {
         console.error('❌ Error handling message:', error);
@@ -215,7 +166,7 @@ async function handleMessage(req, res) {
                 }
 
                 const errorMessage = messageService.generateErrorMessage();
-                await whatsapp.sendMessage(phoneNumber, errorMessage);
+                await whatsapp.sendMessage(phoneNumber, errorMessage, '1');
             }
         } catch (sendError) {
             console.error('❌ Failed to send error message:', sendError);
@@ -233,7 +184,7 @@ async function handleMessage(req, res) {
 /**
  * Handle student message
  */
-async function handleStudentMessage(phoneNumber, body, student) {
+async function handleStudentMessage(phoneNumber, body, student, deviceId) {
     // Parse command
     const { command, period } = messageService.parseCommand(body);
     let responseMessage = '';
@@ -244,12 +195,12 @@ async function handleStudentMessage(phoneNumber, body, student) {
             break;
 
         case 'check_today':
-            const todayAttendance = await attendanceService.getTodayAttendance(student.id);
+            const todayAttendance = await attendanceService.getTodayAttendance(student.id, deviceId);
             responseMessage = messageService.generateTodayAttendanceMessage(student, todayAttendance);
             break;
 
         case 'recap':
-            const stats = await attendanceService.getAttendanceRecap(student.id, period);
+            const stats = await attendanceService.getAttendanceRecap(student.id, period, deviceId);
             responseMessage = messageService.generateRecapMessage(student, stats, period);
             break;
 
@@ -261,7 +212,7 @@ async function handleStudentMessage(phoneNumber, body, student) {
 
     // Send response
     console.log(`📤 Sending response to student ${phoneNumber}`);
-    await whatsapp.sendMessage(phoneNumber, responseMessage);
+    await whatsapp.sendMessage(phoneNumber, responseMessage, deviceId);
 
     return {
         success: true,
@@ -274,7 +225,7 @@ async function handleStudentMessage(phoneNumber, body, student) {
 /**
  * Handle teacher message
  */
-async function handleTeacherMessage(replyTo, body, teacher) {
+async function handleTeacherMessage(replyTo, body, teacher, deviceId) {
     // Get existing session using teacher's phone number as key
     // We use the teacher's registered number from DB for the session key
     const phoneNumber = teacher.no_wa;
@@ -296,7 +247,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     // CREATE ATTENDANCE FLOW
     else if (command === 'search_student') {
         // Search for students
-        const students = await attendanceService.searchStudentsByName(searchTerm);
+        const students = await attendanceService.searchStudentsByName(searchTerm, deviceId);
         responseMessage = messageService.generateStudentSearchResults(students, searchTerm);
 
         if (students.length > 0) {
@@ -314,7 +265,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     // EDIT ATTENDANCE FLOW
     else if (command === 'edit_attendance') {
         // Search for students with attendance today
-        const students = await attendanceService.searchStudentsWithAttendanceToday(searchTerm);
+        const students = await attendanceService.searchStudentsWithAttendanceToday(searchTerm, deviceId);
 
         if (students.length === 0) {
             responseMessage = messageService.generateNoAttendanceFoundMessage(searchTerm);
@@ -335,7 +286,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     // DELETE ATTENDANCE FLOW
     else if (command === 'delete_attendance') {
         // Search for students with attendance today
-        const students = await attendanceService.searchStudentsWithAttendanceToday(searchTerm);
+        const students = await attendanceService.searchStudentsWithAttendanceToday(searchTerm, deviceId);
 
         if (students.length === 0) {
             responseMessage = messageService.generateNoAttendanceFoundMessage(searchTerm);
@@ -356,7 +307,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     // QUICK CHECK-IN FLOW
     else if (command === 'quick_checkin') {
         // Search for students
-        const students = await attendanceService.searchStudentsByName(searchTerm);
+        const students = await attendanceService.searchStudentsByName(searchTerm, deviceId);
 
         if (students.length === 0) {
             responseMessage = messageService.generateStudentSearchResults(students, searchTerm);
@@ -377,7 +328,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     // QUICK CHECK-OUT FLOW
     else if (command === 'quick_checkout') {
         // Search for students with attendance today (must have checked in first)
-        const students = await attendanceService.searchStudentsWithAttendanceToday(searchTerm);
+        const students = await attendanceService.searchStudentsWithAttendanceToday(searchTerm, deviceId);
 
         if (students.length === 0) {
             responseMessage = messageService.generateNoAttendanceForCheckout(searchTerm);
@@ -397,7 +348,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     }
     // RECAP STUDENT FLOW
     else if (command === 'recap_student') {
-        const students = await attendanceService.searchStudentsByName(searchTerm);
+        const students = await attendanceService.searchStudentsByName(searchTerm, deviceId);
         responseMessage = messageService.generateStudentSearchResults(students, searchTerm);
 
         if (students.length > 0) {
@@ -422,7 +373,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
 
                 if (session.action === 'create') {
                     // CREATE: Check if attendance already exists for today
-                    const existingAttendance = await attendanceService.getTodayAttendance(selectedStudent.id);
+                    const existingAttendance = await attendanceService.getTodayAttendance(selectedStudent.id, deviceId);
 
                     if (existingAttendance) {
                         // Show confirmation message
@@ -452,7 +403,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                     });
                 } else if (session.action === 'delete') {
                     // DELETE: Show confirmation
-                    const attendance = await attendanceService.getStudentAttendanceToday(selectedStudent.id);
+                    const attendance = await attendanceService.getStudentAttendanceToday(selectedStudent.id, deviceId);
                     responseMessage = messageService.generateDeleteConfirmationMessage(selectedStudent, attendance);
                     sessionManager.setSession(phoneNumber, {
                         ...session,
@@ -461,7 +412,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                     });
                 } else if (session.action === 'quick_checkin') {
                     // QUICK CHECK-IN: Check if attendance already exists
-                    const existingAttendance = await attendanceService.getTodayAttendance(selectedStudent.id);
+                    const existingAttendance = await attendanceService.getTodayAttendance(selectedStudent.id, deviceId);
 
                     if (existingAttendance) {
                         // Show confirmation message
@@ -474,22 +425,20 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                         });
                     } else {
                         // No existing record, execute check-in immediately
-                        await attendanceService.quickCheckin(selectedStudent.id, session.teacherId, session.teacherName);
+                        await attendanceService.quickCheckin(selectedStudent.id, session.teacherId, session.teacherName, deviceId);
                         responseMessage = messageService.generateQuickCheckinSuccess(
                             selectedStudent.nama,
                             selectedStudent.nama_kelas
                         );
-                        await cleanupBotMessages(phoneNumber);
                         sessionManager.clearSession(phoneNumber);
                     }
                 } else if (session.action === 'quick_checkout') {
                     // QUICK CHECK-OUT: Check if attendance exists and if jam_pulang already set
-                    const existingAttendance = await attendanceService.getTodayAttendance(selectedStudent.id);
+                    const existingAttendance = await attendanceService.getTodayAttendance(selectedStudent.id, deviceId);
 
                     if (!existingAttendance) {
                         // No attendance record found
                         responseMessage = messageService.generateNoAttendanceForCheckout(selectedStudent.nama);
-                        await cleanupBotMessages(phoneNumber);
                         sessionManager.clearSession(phoneNumber);
                     } else if (existingAttendance.jam_pulang) {
                         // Already has jam_pulang, show confirmation
@@ -502,7 +451,7 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                         });
                     } else {
                         // Has attendance but no jam_pulang yet, execute checkout immediately
-                        const result = await attendanceService.quickCheckout(selectedStudent.id, session.teacherName);
+                        const result = await attendanceService.quickCheckout(selectedStudent.id, session.teacherName, deviceId);
 
                         if (result.success) {
                             const jamMasuk = result.jamMasuk ? moment(result.jamMasuk, 'HH:mm:ss').format('HH:mm') : '-';
@@ -514,15 +463,12 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                         } else {
                             responseMessage = messageService.generateNoAttendanceForCheckout(selectedStudent.nama);
                         }
-                        await cleanupBotMessages(phoneNumber);
                         sessionManager.clearSession(phoneNumber);
                     }
                 } else if (session.action === 'recap_student') {
                     // RECAP STUDENT: Show monthly recap for selected student
-                    const stats = await attendanceService.getAttendanceRecap(selectedStudent.id, 'month');
+                    const stats = await attendanceService.getAttendanceRecap(selectedStudent.id, 'month', deviceId);
                     responseMessage = messageService.generateRecapMessage(selectedStudent, stats, 'month');
-
-                    await cleanupBotMessages(phoneNumber);
                     sessionManager.clearSession(phoneNumber);
                 }
             } else {
@@ -532,28 +478,47 @@ async function handleTeacherMessage(replyTo, body, teacher) {
         else if (session.step === 'select_status' && session.action === 'create') {
             // CREATE: Status selection (no Hadir - use masuk command instead)
             const statusMap = {
-                1: 'I', // Izin
-                2: 'S', // Sakit
-                3: 'A'  // Alpha
+                1: 'H', // Hadir
+                2: 'I', // Izin
+                3: 'S', // Sakit
+                4: 'A'  // Alpha
             };
 
             const status = statusMap[option];
 
             if (status) {
-                // Ask for keterangan
-                responseMessage = messageService.generateKeteranganInputMessage(
-                    session.selectedStudent.nama,
-                    status
-                );
-
-                // Update session to wait for keterangan
-                sessionManager.setSession(phoneNumber, {
-                    ...session,
-                    step: 'input_keterangan',
-                    selectedStatus: status
-                });
+                if (status === 'H') {
+                    // Hadir: langsung catat tanpa keterangan
+                    const keterangan = `Hadir (dicatat oleh ${session.teacherName})`;
+                    await attendanceService.createManualAttendance(
+                        session.selectedStudent.id,
+                        status,
+                        session.teacherId,
+                        session.teacherName,
+                        keterangan,
+                        deviceId
+                    );
+                    responseMessage = messageService.generateAttendanceConfirmation(
+                        session.selectedStudent.nama,
+                        session.selectedStudent.nama_kelas,
+                        status,
+                        keterangan
+                    );
+                    sessionManager.clearSession(phoneNumber);
+                } else {
+                    // Izin/Sakit/Alpha: minta keterangan dulu
+                    responseMessage = messageService.generateKeteranganInputMessage(
+                        session.selectedStudent.nama,
+                        status
+                    );
+                    sessionManager.setSession(phoneNumber, {
+                        ...session,
+                        step: 'input_keterangan',
+                        selectedStatus: status
+                    });
+                }
             } else {
-                responseMessage = messageService.generateInvalidSelectionMessage(3);
+                responseMessage = messageService.generateInvalidSelectionMessage(4);
             }
         }
         else if (session.step === 'select_edit_type' && session.action === 'edit') {
@@ -581,9 +546,10 @@ async function handleTeacherMessage(replyTo, body, teacher) {
         else if (session.step === 'edit_status' && session.action === 'edit') {
             // EDIT: New status selection (no Hadir - use masuk command instead)
             const statusMap = {
-                1: 'I', // Izin
-                2: 'S', // Sakit
-                3: 'A'  // Alpha
+                1: 'H', // Hadir
+                2: 'I', // Izin
+                3: 'S', // Sakit
+                4: 'A'  // Alpha
             };
 
             const status = statusMap[option];
@@ -593,7 +559,8 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                 await attendanceService.updateAttendanceStatus(
                     session.selectedStudent.id,
                     status,
-                    session.teacherName
+                    session.teacherName,
+                    deviceId
                 );
 
                 const statusText = {
@@ -609,17 +576,16 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                 );
 
                 // Clear session
-                await cleanupBotMessages(phoneNumber);
                 sessionManager.clearSession(phoneNumber);
             } else {
-                responseMessage = messageService.generateInvalidSelectionMessage(3);
+                responseMessage = messageService.generateInvalidSelectionMessage(4);
             }
         }
     }
 
     // HANDLE CONTACT SEARCH
     else if (command === 'search_contact') {
-        const results = await attendanceService.searchStudentContact(searchTerm);
+        const results = await attendanceService.searchStudentContact(searchTerm, deviceId);
         responseMessage = messageService.generateContactInfo(results, searchTerm);
     }
     // HANDLE CONFIRMATION (YES/NO)
@@ -627,17 +593,16 @@ async function handleTeacherMessage(replyTo, body, teacher) {
         // DELETE: Confirmed
         await attendanceService.deleteAttendanceToday(
             session.selectedStudent.id,
-            session.teacherName
+            session.teacherName,
+            deviceId
         );
 
         responseMessage = messageService.generateDeleteSuccessMessage(session.selectedStudent.nama);
-        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     else if (command === 'confirm_no' && session && session.step === 'confirm_delete') {
         // DELETE: Cancelled
         responseMessage = `❌ *Penghapusan Dibatalkan*\n\nAbsensi tidak jadi dihapus.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
-        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     // HANDLE CONFIRMATION FOR REPLACE CREATE
@@ -653,29 +618,26 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     else if (command === 'confirm_no' && session && session.step === 'confirm_replace_create') {
         // CREATE: User cancelled replacement
         responseMessage = `❌ *Perubahan Dibatalkan*\n\nAbsensi tidak jadi diubah.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
-        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     // HANDLE CONFIRMATION FOR REPLACE CHECKIN
     else if (command === 'confirm_yes' && session && session.step === 'confirm_replace_checkin') {
         // CHECKIN: User confirmed to replace existing check-in
-        await attendanceService.quickCheckin(session.selectedStudent.id, session.teacherId, session.teacherName);
+        await attendanceService.quickCheckin(session.selectedStudent.id, session.teacherId, session.teacherName, deviceId);
         responseMessage = messageService.generateQuickCheckinSuccess(
             session.selectedStudent.nama_kelas
         );
-        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     else if (command === 'confirm_no' && session && session.step === 'confirm_replace_checkin') {
         // CHECKIN: User cancelled replacement
         responseMessage = `❌ *Perubahan Dibatalkan*\n\nJam masuk tidak jadi diubah.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
-        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     // HANDLE CONFIRMATION FOR REPLACE CHECKOUT
     else if (command === 'confirm_yes' && session && session.step === 'confirm_replace_checkout') {
         // CHECKOUT: User confirmed to replace existing check-out
-        const result = await attendanceService.quickCheckout(session.selectedStudent.id, session.teacherName);
+        const result = await attendanceService.quickCheckout(session.selectedStudent.id, session.teacherName, deviceId);
 
         if (result.success) {
             const jamMasuk = result.jamMasuk ? moment(result.jamMasuk, 'HH:mm:ss').format('HH:mm') : '-';
@@ -687,13 +649,11 @@ async function handleTeacherMessage(replyTo, body, teacher) {
         } else {
             responseMessage = messageService.generateNoAttendanceForCheckout(session.selectedStudent.nama);
         }
-        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     else if (command === 'confirm_no' && session && session.step === 'confirm_replace_checkout') {
         // CHECKOUT: User cancelled replacement
         responseMessage = `❌ *Perubahan Dibatalkan*\n\nJam pulang tidak jadi diubah.\n\nKetik \`help\` untuk melihat perintah lainnya.`;
-        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
     // HANDLE TEXT INPUT (KETERANGAN)
@@ -708,7 +668,8 @@ async function handleTeacherMessage(replyTo, body, teacher) {
                 session.selectedStatus,
                 session.teacherId,
                 session.teacherName,
-                keterangan
+                keterangan,
+                deviceId
             );
 
             responseMessage = messageService.generateAttendanceConfirmation(
@@ -719,7 +680,6 @@ async function handleTeacherMessage(replyTo, body, teacher) {
             );
 
             // Clear session
-            await cleanupBotMessages(phoneNumber);
             sessionManager.clearSession(phoneNumber);
         } else {
             responseMessage = `❌ *Keterangan tidak boleh kosong*\n\nSilakan ketik keterangan untuk absensi ini.`;
@@ -734,7 +694,8 @@ async function handleTeacherMessage(replyTo, body, teacher) {
             await attendanceService.updateAttendanceKeterangan(
                 session.selectedStudent.id,
                 keterangan,
-                session.teacherName
+                session.teacherName,
+                deviceId
             );
 
             responseMessage = messageService.generateEditSuccessMessage(
@@ -744,7 +705,6 @@ async function handleTeacherMessage(replyTo, body, teacher) {
             );
 
             // Clear session
-            await cleanupBotMessages(phoneNumber);
             sessionManager.clearSession(phoneNumber);
         } else {
             responseMessage = `❌ *Keterangan tidak boleh kosong*\n\nSilakan ketik keterangan baru.`;
@@ -753,13 +713,12 @@ async function handleTeacherMessage(replyTo, body, teacher) {
     else {
         // Unknown command or no session
         responseMessage = messageService.generateTeacherHelpMessage(teacher.nama);
-        await cleanupBotMessages(phoneNumber);
         sessionManager.clearSession(phoneNumber);
     }
 
     // Send response
     console.log(`📤 Sending response to teacher at ${replyTo}`);
-    const sentResponse = await whatsapp.sendMessage(replyTo, responseMessage);
+    const sentResponse = await whatsapp.sendMessage(replyTo, responseMessage, deviceId);
 
     // If session is still active (not cleared above), track this message ID for later deletion
     const currentSession = sessionManager.getSession(phoneNumber);
@@ -897,22 +856,8 @@ async function handleRegistrationTglInput(from, body, session, phoneNumber) {
     }
 }
 
-async function cleanupBotMessages(phoneNumber) {
-    const messages = sessionManager.getBotMessageIds(phoneNumber);
-    console.log(`🧹 DEBUG: Cleanup Triggered for ${phoneNumber}. Found messages: ${JSON.stringify(messages)}`);
-
-    if (messages && messages.length > 0) {
-        console.log(`🧹 Cleaning up ${messages.length} intermediate messages for ${phoneNumber}`);
-
-        // Delete messages in parallel, using the correct chatId for each message
-        await Promise.all(messages.map(msg => {
-            // Handle both old format (string ID) and new format (object {id, chatId})
-            const msgId = typeof msg === 'string' ? msg : msg.id;
-            const chatId = typeof msg === 'string' ? phoneNumber : (msg.chatId || phoneNumber);
-
-            return whatsapp.deleteMessage(chatId, msgId);
-        }));
-    }
+async function cleanupBotMessages(phoneNumber, deviceId) {
+    // Auto-delete dinonaktifkan
 }
 
 module.exports = {
