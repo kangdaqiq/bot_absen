@@ -1,9 +1,9 @@
 const axios = require('axios');
 require('dotenv').config();
 
-const WA_API_URL = process.env.WA_API_URL || 'http://localhost:3000';
-const WA_API_USERNAME = process.env.WA_API_USERNAME || 'admin';
-const WA_API_PASSWORD = process.env.WA_API_PASSWORD || 'admin';
+const WA_API_URL = process.env.GOWA_API_BASE_URL || process.env.WA_API_URL || 'http://localhost:3000';
+const WA_API_USERNAME = process.env.GOWA_API_USER || process.env.WA_API_USERNAME || 'admin';
+const WA_API_PASSWORD = process.env.GOWA_API_PASS || process.env.WA_API_PASSWORD || 'admin';
 
 let deviceCache = {};
 let lastCacheTime = 0;
@@ -12,7 +12,13 @@ async function resolveDeviceId(deviceId) {
     if (/^\d+$/.test(deviceId) && deviceId.length < 5) return deviceId;
     if (Date.now() - lastCacheTime > 60000) {
         try {
-            const res = await axios.get(WA_API_URL + '/devices');
+            const res = await axios.get(WA_API_URL + '/devices', {
+                auth: {
+                    username: WA_API_USERNAME,
+                    password: WA_API_PASSWORD
+                },
+                timeout: 5000
+            });
             if (res.data && res.data.results) {
                 const newCache = {};
                 res.data.results.forEach(d => {

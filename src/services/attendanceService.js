@@ -674,6 +674,40 @@ async function searchStudentContact(searchTerm, schoolId) {
     }
 }
 
+/**
+ * Check if bot is enabled for this school
+ */
+async function isBotEnabled(schoolId) {
+    try {
+        const [rows] = await db.query(
+            `SELECT bot_enabled, wa_enabled FROM schools WHERE id = ? LIMIT 1`,
+            [schoolId]
+        );
+        if (rows.length === 0) return false;
+        return rows[0].wa_enabled && rows[0].bot_enabled;
+    } catch (error) {
+        console.error('Error checking bot_enabled:', error);
+        return true; // fail open
+    }
+}
+
+/**
+ * Check if a teacher has bot_access enabled
+ */
+async function hasTeacherBotAccess(teacherId) {
+    try {
+        const [rows] = await db.query(
+            `SELECT bot_access FROM guru WHERE id = ? LIMIT 1`,
+            [teacherId]
+        );
+        if (rows.length === 0) return false;
+        return rows[0].bot_access === 1 || rows[0].bot_access === true;
+    } catch (error) {
+        console.error('Error checking teacher bot_access:', error);
+        return true; // fail open
+    }
+}
+
 module.exports = {
     getStudentByPhone,
     getTeacherByPhone,
@@ -692,6 +726,8 @@ module.exports = {
     getStudentByNISAndDate,
     registerStudentPhone,
     searchStudentContact,
+    isBotEnabled,
+    hasTeacherBotAccess,
     formatStatus,
     formatDuration
 };

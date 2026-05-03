@@ -34,6 +34,15 @@ async function handleMessage(req, res) {
         }
         const deviceId = await whatsapp.resolveDeviceId(rawDeviceId);
         console.log(`🔌 Resolved Device ID: ${rawDeviceId} -> ${deviceId}`);
+
+        // ── Cek apakah bot aktif untuk sekolah ini ────────────────────────
+        const botActive = await attendanceService.isBotEnabled(deviceId);
+        if (!botActive) {
+            console.log(`🤖 Bot dinonaktifkan untuk school/device ID: ${deviceId}. Pesan diabaikan.`);
+            return res.json({ success: true, message: 'Bot disabled for this school' });
+        }
+        // ─────────────────────────────────────────────────────────────
+
         if (webhookData.body && !webhookData.message) webhookData.message = { text: webhookData.body };
         if (webhookData.from_name && !webhookData.pushname) webhookData.pushname = webhookData.from_name;
         if (!webhookData.sender_id) webhookData.sender_id = webhookData.from;
@@ -134,6 +143,18 @@ async function handleMessage(req, res) {
 
         if (teacher) {
             console.log(`👨‍🏫 Teacher found: ${teacher.nama}`);
+
+            // ── Cek apakah guru ini punya akses bot ───────────────────────
+            const hasBotAccess = await attendanceService.hasTeacherBotAccess(teacher.id);
+            if (!hasBotAccess) {
+                console.log(`🚫 Guru ${teacher.nama} tidak memiliki akses bot. Diabaikan.`);
+                if (!isGroupMessage) {
+                    await whatsapp.sendMessage(phoneNumber, "Maaf, nomor Anda belum terdaftar di sistem kami. Silakan hubungi admin sekolah.", deviceId);
+                }
+                return res.json({ success: true, message: 'Teacher bot access denied' });
+            }
+            // ─────────────────────────────────────────────────────────────
+
             const replyTo = isGroupMessage ? chat_id : phoneNumber;
             const result = await handleTeacherMessage(replyTo, body, teacher, deviceId);
             return res.json(result);
@@ -147,6 +168,7 @@ async function handleMessage(req, res) {
 
         // Non-teacher private message — bot hanya untuk guru, abaikan
         console.log(`⏭️ Ignoring non-teacher private message from ${phoneNumber}`);
+        await whatsapp.sendMessage(phoneNumber, "Maaf, nomor Anda belum terdaftar di sistem kami. Silakan hubungi admin sekolah.", deviceId);
         return res.json({ success: true, message: 'Non-teacher message ignored' });
 
     } catch (error) {
