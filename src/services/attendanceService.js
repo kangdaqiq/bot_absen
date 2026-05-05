@@ -708,6 +708,25 @@ async function hasTeacherBotAccess(teacherId) {
     }
 }
 
+/**
+ * Get school name
+ */
+async function getSchoolName(schoolId) {
+    try {
+        const [rows] = await db.query(
+            `SELECT name FROM schools WHERE id = ? LIMIT 1`,
+            [schoolId]
+        );
+        if (rows.length > 0 && rows[0].name) {
+            return rows[0].name;
+        }
+        return 'Sekolah Anda';
+    } catch (error) {
+        console.error('Error getting school name:', error);
+        return 'Sekolah Anda';
+    }
+}
+
 module.exports = {
     getStudentByPhone,
     getTeacherByPhone,
@@ -728,6 +747,7 @@ module.exports = {
     searchStudentContact,
     isBotEnabled,
     hasTeacherBotAccess,
+    getSchoolName,
     formatStatus,
     formatDuration
 };

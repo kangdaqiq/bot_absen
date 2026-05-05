@@ -136,10 +136,10 @@ function parseTeacherCommand(message) {
 /**
  * Generate help message
  */
-function generateHelpMessage(studentName) {
+function generateHelpMessage(studentName, schoolName = 'Sekolah Anda') {
     return `👋 *Assalamualaikum, ${studentName}!*
 
-Selamat datang di *Bot Absensi SMK Assuniyah* 🎓
+Selamat datang di *Bot Absensi ${schoolName}* 🎓
 
 📋 *Daftar Perintah:*
 
@@ -305,10 +305,10 @@ Ketik *menu* atau *help* untuk melihat daftar perintah yang tersedia.`;
 /**
  * Generate teacher help message
  */
-function generateTeacherHelpMessage(teacherName) {
+function generateTeacherHelpMessage(teacherName, schoolName = 'Sekolah Anda') {
     return `👋 *Assalamualaikum, ${teacherName}!*
 
-Selamat datang di *Bot Absensi SMK Assuniyah* 🎓
+Selamat datang di *Bot Absensi ${schoolName}* 🎓
 
 📋 *Daftar Perintah:*
 

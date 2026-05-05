@@ -212,9 +212,11 @@ async function handleStudentMessage(phoneNumber, body, student, deviceId) {
     let responseMessage = '';
 
     switch (command) {
-        case 'help':
-            responseMessage = messageService.generateHelpMessage(student.nama);
+        case 'help': {
+            const schoolName = await attendanceService.getSchoolName(deviceId);
+            responseMessage = messageService.generateHelpMessage(student.nama, schoolName);
             break;
+        }
 
         case 'check_today':
             const todayAttendance = await attendanceService.getTodayAttendance(student.id, deviceId);
@@ -264,7 +266,8 @@ async function handleTeacherMessage(replyTo, body, teacher, deviceId) {
     if (command === 'teacher_help') {
         // Clear any existing session
         sessionManager.clearSession(phoneNumber);
-        responseMessage = messageService.generateTeacherHelpMessage(teacher.nama);
+        const schoolName = await attendanceService.getSchoolName(deviceId);
+        responseMessage = messageService.generateTeacherHelpMessage(teacher.nama, schoolName);
     }
     // CREATE ATTENDANCE FLOW
     else if (command === 'search_student') {
@@ -734,7 +737,8 @@ async function handleTeacherMessage(replyTo, body, teacher, deviceId) {
     }
     else {
         // Unknown command or no session
-        responseMessage = messageService.generateTeacherHelpMessage(teacher.nama);
+        const schoolName = await attendanceService.getSchoolName(deviceId);
+        responseMessage = messageService.generateTeacherHelpMessage(teacher.nama, schoolName);
         sessionManager.clearSession(phoneNumber);
     }
 
